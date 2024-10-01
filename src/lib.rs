@@ -12,6 +12,7 @@ fn get_log_2(x: u32) -> u32 {
 }
 
 pub mod comb;
+pub mod dsu;
 pub mod fenw;
 pub mod modint;
 pub mod rng;

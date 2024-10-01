@@ -4,6 +4,8 @@ use std::{
     fmt::write,
     io::{self, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
+    mem::swap,
+    ops::RangeBounds,
     str::FromStr,
 };
 
@@ -52,6 +54,13 @@ fn read_vec_template<T: FromStr + Copy>(
         Ok(data) => data,
         Err(_) => default,
     }))
+}
+
+#[allow(dead_code)]
+fn read_vec_string_template(line: &mut String, reader: &mut BufReader<Stdin>) -> Vec<String> {
+    line.clear();
+    reader.read_line(line).unwrap();
+    line.split_whitespace().map(|x| x.to_string()).collect()
 }
 
 #[allow(unused_macros)]
@@ -110,37 +119,92 @@ fn upper_bound_pos<T: Ord + PartialOrd>(a: &Vec<T>, search_value: T) -> usize {
     .unwrap_err()
 }
 
-// =========================== End template here =======================
+#[allow(dead_code)]
+struct DSU {
+    n: usize,
+    parent: Vec<usize>,
+    size: Vec<usize>,
+}
 
+#[allow(dead_code)]
+impl DSU {
+    pub fn new(sz: usize) -> Self {
+        DSU {
+            n: sz,
+            parent: (0..sz).collect(),
+            size: vec![0; sz],
+        }
+    }
+
+    pub fn find_parent(&mut self, u: usize) -> usize {
+        if self.parent[u] == u {
+            return u;
+        }
+        self.parent[u] = self.find_parent(self.parent[u]);
+        return self.parent[u];
+    }
+
+    pub fn union(&mut self, u: usize, v: usize) {
+        let mut pu = self.find_parent(u);
+        let mut pv = self.find_parent(v);
+        if pu == pv {
+            return;
+        }
+        if self.size[pu] > self.size[pv] {
+            swap(&mut pu, &mut pv);
+        }
+        self.size[pu] += self.size[pv];
+        self.parent[pv] = pu;
+    }
+}
+
+// =========================== End template here =======================
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     let v = read_vec_template(line, reader, 0);
     let t = v[0];
     for _te in 0..t {
         let v = read_vec_template(line, reader, 0);
-        let n: usize = v[0];
-        let a = read_vec_template(line, reader, 0);
-        let mut curs = 0;
-        (0..n).rev().for_each(|i| {
-            if i == n - 1 {
-                curs = a[i];
-            } else {
-                if a[i] <= a[i + 1] {
-                    // a[i] need to wait until a[i+1] = a[i], then 1 more move to reduce together.
-                    curs += 1;
-                } else {
-                    // a[i] > a[i+1], a[i] reduced separatedly into a[i+1]
-                    if curs < a[i] {
-                        // With all previous move, still can't reduce a[i] fully
-                        curs = a[i]; // After a[i+1] = 0, a[i] still remain some!
-                    } else {
-                        // a[i] become a[i+1] at some point, only to wait
-                        // Since a[i] = a[i+1], take one more move to reduce a[i] to 0.
-                        curs += 1;
-                    }
-                }
-            }
+        let (n, m) = (v[0], v[1]);
+
+        let mut dsu = DSU::new(n + 1);
+
+        // Slip start / end of each query by categories
+        let mut start_cnt: Vec<Vec<i32>> = vec![vec![0; 11]; n + 1];
+        let mut end_cnt: Vec<Vec<i32>> = vec![vec![0; 11]; n + 1];
+
+        let mut dp: Vec<Vec<i32>> = vec![vec![0; 11]; n + 1];
+        let mut id: Vec<Vec<usize>> = vec![vec![0; 11]; n + 1];
+
+        // Initiate ID
+        (0..=n).for_each(|i| {
+            (1..=10).for_each(|j| {
+                id[i][j] = i;
+            });
         });
-        writeln!(out, "{curs}").unwrap();
+
+        (0..m).for_each(|_| {
+            let v: Vec<usize> = read_vec_template(line, reader, 0);
+            let (a, d, k) = (v[0], v[1], v[2]);
+            start_cnt[a][d] += 1;
+            end_cnt[a + k * d][d] += 1;
+        });
+
+        (1..=n).for_each(|i| {
+            (1..=10).for_each(|j| {
+                dp[i][j] = start_cnt[i][j] - end_cnt[i][j];
+                if i < j + 1 {
+                    return;
+                }
+                if dp[i - j][j] > 0 {
+                    dsu.union(id[i - j][j], i);
+                    id[i][j] = id[i - j][j];
+                    dp[i][j] += dp[i - j][j];
+                }
+            });
+        });
+
+        let ans = (1..=n).filter(|&u| dsu.find_parent(u) == u).count();
+        writeln!(out, "{ans}").unwrap();
     }
 }
 
