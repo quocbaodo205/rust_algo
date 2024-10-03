@@ -16,6 +16,7 @@ pub mod dsu;
 pub mod fenw;
 pub mod modint;
 pub mod rng;
+pub mod root_tree;
 pub mod segment_tree;
 pub mod string;
 pub mod trie;
