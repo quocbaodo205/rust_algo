@@ -2,6 +2,7 @@ use std::{
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet},
     fmt::write,
+    fmt::Debug,
     io::{self, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
     mem::swap,
@@ -131,38 +132,7 @@ fn upper_bound_pos<T: Ord + PartialOrd>(a: &Vec<T>, search_value: T) -> usize {
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number_(line, reader, 0);
-    (0..t).for_each(|_te| {
-        let n: usize = read_1_number_(line, reader, 0);
-        let mut a: Vec<usize> = read_vec_template(line, reader, 0);
-        let g: usize = a.iter().fold(0, |g, &x| gcd(g, x));
-        a.iter_mut().for_each(|x| *x /= g);
-
-        // Take until gcd = 1
-        let mut used: Vec<bool> = vec![false; n];
-        let mut cur_sum = 0;
-        let mut cur_gcd = 0;
-        loop {
-            let min_g = (0..n)
-                .filter(|&i| !used[i])
-                .map(|i| gcd(cur_gcd, a[i]))
-                .min()
-                .unwrap();
-            let pos = (0..n)
-                .filter(|&i| !used[i] && gcd(cur_gcd, a[i]) == min_g)
-                .next()
-                .unwrap();
-            cur_gcd = min_g;
-            cur_sum += min_g as u64;
-            used[pos] = true;
-            if min_g == 1 {
-                break;
-            }
-        }
-        // The rest: += 1;
-        cur_sum += used.iter().filter(|&&u| !u).count() as u64;
-        cur_sum *= g as u64;
-        writeln!(out, "{cur_sum}").unwrap();
-    });
+    (0..t).for_each(|_te| {});
 }
 
 fn main() {

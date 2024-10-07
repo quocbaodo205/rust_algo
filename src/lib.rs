@@ -14,7 +14,9 @@ fn get_log_2(x: u32) -> u32 {
 pub mod comb;
 pub mod dsu;
 pub mod fenw;
+pub mod game;
 pub mod modint;
+pub mod prime;
 pub mod rng;
 pub mod root_tree;
 pub mod segment_tree;
