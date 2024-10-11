@@ -6,6 +6,7 @@ use std::{
     io::{self, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
     mem::swap,
+    ops::Bound::*,
     ops::RangeBounds,
     str::FromStr,
 };
@@ -138,231 +139,86 @@ fn upper_bound_pos<T: Ord + PartialOrd>(a: &Vec<T>, search_value: T) -> usize {
     .unwrap_err()
 }
 
+#[allow(dead_code)]
+fn neighbors<T>(tree: &BTreeSet<T>, val: T) -> (Option<&T>, Option<&T>)
+where
+    T: Ord + Copy,
+{
+    let mut before = tree.range((Unbounded, Excluded(val)));
+    let mut after = tree.range((Excluded(val), Unbounded));
+
+    (before.next_back(), after.next())
+}
+
+type V<T> = Vec<T>;
+type V2<T> = V<V<T>>;
+type Set<T> = BTreeSet<T>;
+
 // =========================== End template here =======================
-
-#[allow(dead_code)]
-struct SegmentTreeIsInc {
-    len: usize,
-    tree_min: Vec<usize>,
-    tree_max: Vec<usize>,
-    is_inc: Vec<bool>,
-}
-
-#[allow(dead_code)]
-impl SegmentTreeIsInc {
-    pub fn new(n: usize) -> Self {
-        SegmentTreeIsInc {
-            len: n,
-            tree_min: vec![1000000000; 4 * n + 1],
-            tree_max: vec![0; 4 * n + 1],
-            is_inc: vec![true; 4 * n + 1],
-        }
-    }
-
-    fn query_internal_min(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-    ) -> usize {
-        if ql > qr {
-            return 1000000000;
-        }
-        if tl == ql && tr == qr {
-            return self.tree_min[node];
-        }
-        let mid = (tl + tr) / 2;
-        let mmin = min(
-            self.query_internal_min(node * 2, tl, mid, ql, min(qr, mid)),
-            self.query_internal_min(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr),
-        );
-        mmin
-    }
-
-    fn query_internal_max(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-    ) -> usize {
-        if ql > qr {
-            return 0;
-        }
-        if tl == ql && tr == qr {
-            return self.tree_max[node];
-        }
-        let mid = (tl + tr) / 2;
-        let mmax = max(
-            self.query_internal_max(node * 2, tl, mid, ql, min(qr, mid)),
-            self.query_internal_max(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr),
-        );
-        mmax
-    }
-
-    fn query_internal_is_inc(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-    ) -> bool {
-        if ql > qr {
-            return true;
-        }
-        if tl == ql && tr == qr {
-            return self.is_inc[node];
-        }
-        let mid = (tl + tr) / 2;
-        let max_left = self.query_internal_max(node * 2, tl, mid, ql, min(qr, mid));
-        let min_right = self.query_internal_min(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr);
-        if max_left <= min_right {
-            return self.query_internal_is_inc(node * 2, tl, mid, ql, min(qr, mid))
-                & self.query_internal_is_inc(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr);
-        } else {
-            return false;
-        }
-    }
-
-    // Query the inclusive range [l..r]
-    pub fn query_min(&mut self, l: usize, r: usize) -> usize {
-        self.query_internal_min(1, 0, self.len - 1, l, r)
-    }
-
-    pub fn query_is_inc(&mut self, l: usize, r: usize) -> bool {
-        self.query_internal_is_inc(1, 0, self.len - 1, l, r)
-    }
-
-    fn update_internal(&mut self, node: usize, tl: usize, tr: usize, pos: usize, val: usize) {
-        if tl == tr {
-            self.tree_min[node] = val;
-            self.tree_max[node] = val;
-            self.is_inc[node] = true;
-        } else {
-            let mid = (tl + tr) / 2;
-            if pos <= mid {
-                self.update_internal(node * 2, tl, mid, pos, val);
-            } else {
-                self.update_internal(node * 2 + 1, mid + 1, tr, pos, val);
-            }
-            self.tree_min[node] = min(self.tree_min[node * 2], self.tree_min[node * 2 + 1]);
-            self.tree_max[node] = max(self.tree_max[node * 2], self.tree_max[node * 2 + 1]);
-            if self.tree_max[node * 2] <= self.tree_min[node * 2 + 1] {
-                // println!(
-                //     "Updating inc of {tl},{tr} = {:?}",
-                //     self.is_inc[node * 2] & self.is_inc[node * 2 + 1]
-                // );
-                self.is_inc[node] = self.is_inc[node * 2] & self.is_inc[node * 2 + 1];
-            } else {
-                // println!(
-                //     "Updating inc of {tl},{tr} to false since it {} > {}",
-                //     self.tree_max[node * 2],
-                //     self.tree_min[node * 2 + 1]
-                // );
-                self.is_inc[node] = false;
-            }
-        }
-    }
-
-    pub fn update(&mut self, pos: usize, val: usize) {
-        self.update_internal(1, 0, self.len - 1, pos, val);
-    }
-}
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number_(line, reader, 0);
     (0..t).for_each(|_te| {
-        // println!("Case {_te}");
-        let (n, m, q) = read_3_number_::<usize>(line, reader, 0);
-
-        let mut mp: Vec<usize> = vec![0; n];
-        let a: Vec<usize> = read_vec_template(line, reader, 0);
-        (0..n).for_each(|i| mp[a[i] - 1] = i);
-
-        let b: Vec<usize> = read_vec_template(line, reader, 0);
-        let mut b: Vec<usize> = b.iter().map(|&x| mp[x - 1]).collect();
-        // println!("mp = {mp:?}, b = {b:?}");
-
-        // Create a segment tree, s[i]: first position of b[i].
-        // Help answer the following: if all first position is increasing.
-        let mut stree = SegmentTreeIsInc::new(n);
-        let mut occ: Vec<BTreeSet<usize>> = vec![BTreeSet::new(); n];
-
-        (0..n).for_each(|i| stree.update(i, m));
-        b.iter().enumerate().for_each(|(i, &x)| {
-            occ[x].insert(i);
-            if occ[x].len() == 1 {
-                // println!("Updating first occ of {x}: {i}");
-                stree.update(x, i);
+        let (n, m) = read_2_number_(line, reader, 0usize);
+        let mut g: V2<usize> = vec![V::new(); n];
+        let mut revg: V2<usize> = vec![V::new(); n];
+        (0..m).for_each(|_| {
+            let (mut u, mut v) = read_2_number_(line, reader, 0usize);
+            u -= 1;
+            v -= 1;
+            if u > v {
+                swap(&mut u, &mut v);
             }
+            g[u].push(v);
+            revg[v].push(u);
         });
 
-        writeln!(
-            out,
-            "{}",
-            if stree.query_is_inc(0, n - 1) {
-                "YA"
-            } else {
-                "TIDAK"
+        let mut d: V<usize> = (0..n).collect();
+        (0..n).for_each(|u| {
+            if u > 0 {
+                d[u] = min(d[u], d[u - 1] + 1);
             }
-        )
-        .unwrap();
+            g[u].iter().for_each(|&v| d[v] = min(d[v], d[u] + 1));
+        });
 
-        (0..q).for_each(|_| {
-            let (s, t) = read_2_number_(line, reader, 0);
-            let (s, t) = (s - 1, mp[t - 1]);
+        // println!("Case {_te}, d = {d:?}");
 
-            // println!("Changing b[{s}] to {t}");
+        let mut gt = 0;
+        let mut max_good_right: Set<(usize, usize)> = Set::new();
+        let mut to_erase: V2<(usize, usize)> = vec![V::new(); n];
 
-            let old_val = b[s];
-            // Changing the first occurence
-            if occ[old_val].first().unwrap() == &s {
-                // println!("Some change the occ[{old_val}]");
-                occ[old_val].remove(&s);
-                match occ[old_val].first() {
-                    Some(&x) => {
-                        stree.update(old_val, x);
-                    }
-                    None => {
-                        stree.update(old_val, m);
-                    }
-                }
-            } else {
-                occ[old_val].remove(&s);
-            }
+        let mut ans: V<bool> = vec![false; n - 1];
+        (0..n).rev().for_each(|s| {
+            revg[s].iter().for_each(|&v| {
+                // edge v -> u (it's the reverse graph)
+                // + GT for multiset
+                let mdv = (s - d[v], gt);
+                gt += 1;
+                max_good_right.insert(mdv);
+                to_erase[v].push(mdv);
+            });
+            // println!("u = {u}, current set = {max_good_right:?}");
 
-            match occ[t].first() {
-                Some(&x) => {
-                    // New position is the smallest
-                    if s < x {
-                        // println!("occ[{t}] updating to smaller postion");
-                        stree.update(t, s);
-                    }
-                }
-                None => {
-                    // Nothing, this is first
-                    // println!("occ[{t}] updating to first");
-                    stree.update(t, s);
-                }
-            }
-            occ[t].insert(s);
-            b[s] = t;
+            // Delete added bridge that start at u
+            to_erase[s].iter().for_each(|e| {
+                max_good_right.remove(e);
+            });
 
-            writeln!(
-                out,
-                "{}",
-                if stree.query_is_inc(0, n - 1) {
-                    "YA"
+            if s < n - 1 {
+                let mdv = if max_good_right.is_empty() {
+                    -1
                 } else {
-                    "TIDAK"
+                    max_good_right.last().unwrap().0 as i32
+                };
+                if s as i32 >= mdv - 1 {
+                    ans[s] = true;
                 }
-            )
-            .unwrap();
+            }
         });
+
+        ans.iter()
+            .for_each(|&valid| write!(out, "{}", if valid { 1 } else { 0 }).unwrap());
+        writeln!(out).unwrap();
     });
 }
 
