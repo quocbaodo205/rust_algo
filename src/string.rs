@@ -38,3 +38,25 @@ fn manacher(st: &str) -> Vec<usize> {
     let p = manacher_odd(&t);
     p[1..p.len() - 1].to_vec()
 }
+
+#[allow(dead_code)]
+// https://cp-algorithms.com/string/z-function.html
+fn z_function(s: &Vec<u8>) -> Vec<usize> {
+    let n = s.len();
+    let mut z = vec![0; n];
+    let mut l = 0;
+    let mut r = 0;
+    (1..n).for_each(|i| {
+        if i < r {
+            z[i] = min(r - i, z[i - l]);
+        }
+        while (i + z[i] < n) && (s[z[i]] == s[i + z[i]]) {
+            z[i] += 1;
+        }
+        if i + z[i] > r {
+            l = i;
+            r = i + z[i];
+        }
+    });
+    z
+}

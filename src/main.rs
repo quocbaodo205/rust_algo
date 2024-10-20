@@ -150,74 +150,137 @@ where
     (before.next_back(), after.next())
 }
 
+// Copy this as needed, this is too restricted.
+#[allow(dead_code)]
+fn bin_search_template(l: usize, r: usize, f: &dyn Fn(usize) -> bool) -> usize {
+    let mut l = l;
+    let mut r = r;
+
+    let mut ans = l; // Change acordingly.
+    while l <= r {
+        let mid = (l + r) / 2;
+        if f(mid) {
+            ans = mid;
+            l = mid + 1;
+        } else {
+            r = mid - 1;
+        }
+    }
+    return ans;
+}
+
+#[allow(dead_code)]
+fn num_digit(x: u64) -> u64 {
+    let mut c = 0;
+    let mut rx = x;
+    while rx > 0 {
+        rx /= 10;
+        c += 1;
+    }
+    return c;
+}
+
+#[allow(dead_code)]
+// https://cp-algorithms.com/string/z-function.html
+fn z_function(s: &Vec<u8>) -> Vec<usize> {
+    let n = s.len();
+    let mut z = vec![0; n];
+    let mut l = 0;
+    let mut r = 0;
+    (1..n).for_each(|i| {
+        if i < r {
+            z[i] = min(r - i, z[i - l]);
+        }
+        while (i + z[i] < n) && (s[z[i]] == s[i + z[i]]) {
+            z[i] += 1;
+        }
+        if i + z[i] > r {
+            l = i;
+            r = i + z[i];
+        }
+    });
+    z
+}
+
+// =========================== End template here =======================
+
 type V<T> = Vec<T>;
 type V2<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
 
-// =========================== End template here =======================
-
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number_(line, reader, 0);
     (0..t).for_each(|_te| {
-        let (n, m) = read_2_number_(line, reader, 0usize);
-        let mut g: V2<usize> = vec![V::new(); n];
-        let mut revg: V2<usize> = vec![V::new(); n];
-        (0..m).for_each(|_| {
-            let (mut u, mut v) = read_2_number_(line, reader, 0usize);
-            u -= 1;
-            v -= 1;
-            if u > v {
-                swap(&mut u, &mut v);
+        let (n, l, r) = read_3_number_(line, reader, 0usize);
+        let s = read_line_str_as_vec_template(line, reader);
+        let z = z_function(&s);
+
+        let mut ans: V<usize> = vec![0; n + 1];
+        ans[1] = n;
+        let E: usize = (n as f32).sqrt() as usize + 1;
+        // Check each prefix to find the max split for it
+        (1..=E).for_each(|t| {
+            let mut cur_split = 1;
+            let mut j = t;
+            while j < n {
+                while j < n && z[j] < t {
+                    j += 1;
+                }
+                if j == n {
+                    break;
+                }
+                cur_split += 1;
+                ans[cur_split] = max(ans[cur_split], t);
+                j += t;
             }
-            g[u].push(v);
-            revg[v].push(u);
         });
+        // println!("Case {_te}, z = {z:?}");
+        // Divide s into k substrings
+        (2..=E).for_each(|k| {
+            // println!("k = {k}");
+            // Binary search to find the max LCP
+            let mut l = 1;
+            let mut r = n;
 
-        let mut d: V<usize> = (0..n).collect();
-        (0..n).for_each(|u| {
-            if u > 0 {
-                d[u] = min(d[u], d[u - 1] + 1);
-            }
-            g[u].iter().for_each(|&v| d[v] = min(d[v], d[u] + 1));
-        });
+            let mut lp = 0;
+            while l <= r {
+                let mid = (l + r) / 2;
+                // println!("l = {l}, r = {r}, mid = {mid}, lp = {lp}");
 
-        // println!("Case {_te}, d = {d:?}");
+                // Find if can k split
+                let mut cur_split = 1;
+                let mut j = mid;
+                while j < n && cur_split < k {
+                    while j < n && z[j] < mid {
+                        j += 1;
+                    }
+                    // println!("j = {j}, cur = {cur_split}");
+                    if j == n {
+                        break;
+                    }
+                    cur_split += 1;
+                    j += mid;
+                }
 
-        let mut gt = 0;
-        let mut max_good_right: Set<(usize, usize)> = Set::new();
-        let mut to_erase: V2<(usize, usize)> = vec![V::new(); n];
+                // println!("Lastly cur = {cur_split}");
 
-        let mut ans: V<bool> = vec![false; n - 1];
-        (0..n).rev().for_each(|s| {
-            revg[s].iter().for_each(|&v| {
-                // edge v -> u (it's the reverse graph)
-                // + GT for multiset
-                let mdv = (s - d[v], gt);
-                gt += 1;
-                max_good_right.insert(mdv);
-                to_erase[v].push(mdv);
-            });
-            // println!("u = {u}, current set = {max_good_right:?}");
-
-            // Delete added bridge that start at u
-            to_erase[s].iter().for_each(|e| {
-                max_good_right.remove(e);
-            });
-
-            if s < n - 1 {
-                let mdv = if max_good_right.is_empty() {
-                    -1
+                if cur_split >= k {
+                    lp = mid;
+                    l = mid + 1;
                 } else {
-                    max_good_right.last().unwrap().0 as i32
-                };
-                if s as i32 >= mdv - 1 {
-                    ans[s] = true;
+                    r = mid - 1;
                 }
             }
+
+            // Found the max LCP to split into k substrings
+            if lp != 0 {
+                ans[k] = max(ans[k], lp);
+            }
         });
 
-        ans.iter()
-            .for_each(|&valid| write!(out, "{}", if valid { 1 } else { 0 }).unwrap());
+        (l..=r).for_each(|i| {
+            write!(out, "{} ", ans[i]).unwrap();
+        });
         writeln!(out).unwrap();
     });
 }
