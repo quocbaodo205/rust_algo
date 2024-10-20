@@ -169,6 +169,36 @@ fn bin_search_template(l: usize, r: usize, f: &dyn Fn(usize) -> bool) -> usize {
     return ans;
 }
 
+pub fn next_permutation<T>(arr: &mut [T]) -> bool
+where
+    T: std::cmp::Ord,
+{
+    use std::cmp::Ordering;
+
+    // find 1st pair (x, y) from back which satisfies x < y
+    let last_ascending = match arr.windows(2).rposition(|w| w[0] < w[1]) {
+        Some(i) => i,
+        None => {
+            arr.reverse();
+            return false;
+        }
+    };
+
+    // In the remaining later segment, find the one which is just
+    // larger that the index found above.
+    // SAFETY: unwrap_err whill not panic since binary search will
+    // will never succeed since we never return equal ordering
+    let swap_with = arr[last_ascending + 1..]
+        .binary_search_by(|n| match arr[last_ascending].cmp(n) {
+            Ordering::Equal => Ordering::Greater,
+            ord => ord,
+        })
+        .unwrap_err();
+    arr.swap(last_ascending, last_ascending + swap_with);
+    arr[last_ascending + 1..].reverse();
+    true
+}
+
 #[allow(dead_code)]
 fn num_digit(x: u64) -> u64 {
     let mut c = 0;
