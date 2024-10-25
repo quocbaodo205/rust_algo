@@ -60,3 +60,21 @@ fn z_function(s: &Vec<u8>) -> Vec<usize> {
     });
     z
 }
+
+#[allow(dead_code)]
+fn is_palindrome(s: &[u8]) -> bool {
+    let mut i = 0;
+    let mut j = s.len() - 1;
+    while i < j {
+        if s[i] != s[j] {
+            return false;
+        }
+        i += 1;
+        j -= 1;
+    }
+    true
+}
+
+fn get_c(c: u8) -> usize {
+    (c - 'a' as u8) as usize
+}
