@@ -1,6 +1,7 @@
 // Trie implementation
 // Mutable, clonable
 
+use std::mem;
 use std::rc::Rc;
 
 // Using Box, when transfer ownership, won't copy
@@ -258,6 +259,189 @@ impl Default for PersistentTrie {
     }
 }
 
+// Compressed trie to use when string is just too long.
+// Label are just reference so it's even more efficient.
+type CTrieLink<'a> = Option<Box<CTrieNode<'a>>>;
+
+struct CTrieNode<'a> {
+    val: i32,
+    children: [CTrieLink<'a>; 26],
+    label: &'a [u8],
+}
+
+const CREPEAT: Option<Box<CTrieNode>> = None;
+
+impl<'a> CTrieNode<'a> {
+    pub fn new(val: i32, label: &'a [u8]) -> Self {
+        CTrieNode {
+            val,
+            children: [CREPEAT; 26],
+            label,
+        }
+    }
+}
+
+pub struct CTrie<'a> {
+    head: CTrieNode<'a>,
+}
+
+fn prefix_pos(label: &[u8], st: &[u8]) -> usize {
+    let mut pos = st.len();
+    for (i, &c) in st.iter().enumerate() {
+        if label.len() <= i {
+            pos = i;
+            break;
+        }
+        if c as u8 != label[i] {
+            pos = i;
+            break;
+        }
+    }
+    pos
+}
+
+impl<'a> CTrie<'a> {
+    pub fn new(x: &'a [u8]) -> Self {
+        CTrie {
+            head: CTrieNode::new(0, x),
+        }
+    }
+
+    pub fn insert(&mut self, st: &'a [u8]) {
+        let mut cur = &mut self.head;
+        let mut rst = st;
+
+        loop {
+            let pos = prefix_pos(&cur.label, rst);
+            println!(
+                "insert label = {:?}, rst = {:?}, pos = {pos}",
+                cur.label, rst
+            );
+            // Case 1: rst is a prefix of label
+            if pos == rst.len() {
+                println!("insert case 1, cur.val = {}", cur.val);
+                if cur.label.len() == rst.len() {
+                    cur.val += 1;
+                    break;
+                }
+
+                let c_old = (cur.label[pos] - b'a') as usize;
+                let old_child_label = &cur.label[pos..];
+
+                // When break, combine all other children...
+                // Dance!
+                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
+                (0..26).for_each(
+                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
+                        Some(nd) => {
+                            new_node.children[c_idx] = Some(nd);
+                        }
+                        None => {}
+                    },
+                );
+                cur.children[c_old] = Some(new_node);
+                cur.label = &cur.label[..pos];
+                cur.val += 1;
+                break;
+            }
+            // Case 2: same prefix < label -> break up the label and add 2 childrens
+            if cur.label.len() > pos {
+                println!("insert case 2, cur.val = {}", cur.val);
+                let c_old = (cur.label[pos] - b'a') as usize;
+                let c_new = (rst[pos] - b'a') as usize;
+
+                let old_label = &cur.label[..pos];
+                let old_child_label = &cur.label[pos..];
+                let new_child_label = &rst[pos..];
+
+                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
+                (0..26).for_each(
+                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
+                        Some(nd) => {
+                            new_node.children[c_idx] = Some(nd);
+                        }
+                        None => {}
+                    },
+                );
+                cur.children[c_old] = Some(new_node);
+
+                // New stuff always 1
+                cur.children[c_new] = Some(Box::new(CTrieNode::new(1, new_child_label)));
+
+                cur.val += 1; // count # prefix
+                cur.label = old_label;
+                break;
+            } else if cur.label.len() <= pos {
+                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
+                println!("insert case 3, cur.val = {}", cur.val);
+                let c_new = (rst[pos] - b'a') as usize;
+                if cur.children[c_new].is_none() {
+                    // Add the whole (new so it's 1)
+                    cur.val += 1;
+                    cur.children[c_new] = Some(Box::new(CTrieNode::new(1, &rst[pos..])));
+                    break;
+                } else {
+                    cur.val += 1;
+                    cur = cur.children[c_new].as_mut().unwrap();
+                    rst = &rst[pos..];
+                }
+            }
+        }
+        println!("Done....................................");
+    }
+
+    pub fn get(&mut self, st: &[u8]) -> i32 {
+        let mut cur = &mut self.head;
+        let mut rst = st;
+
+        loop {
+            let pos = prefix_pos(&cur.label, rst);
+            // Case 1: rst is a prefix of label
+            if pos == rst.len() {
+                // println!("get case 1");
+                return cur.val;
+            }
+            // Case 2: same prefix < label -> Cannot be found
+            if cur.label.len() > pos {
+                return 0;
+            } else if cur.label.len() <= pos {
+                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
+                let c_new = (rst[pos] - b'a') as usize;
+                if cur.children[c_new].is_none() {
+                    return 0;
+                } else {
+                    cur = cur.children[c_new].as_mut().unwrap();
+                    rst = &rst[pos..];
+                }
+            }
+        }
+    }
+
+    // Emulate 1 by 1 child move for more intuitive search
+    pub fn get_1b1(&mut self, st: &[u8]) -> i32 {
+        let mut cur = &mut self.head;
+        let mut j = 0;
+        for &c in st.iter() {
+            let idx = (c - b'a') as usize;
+            if j < cur.label.len() {
+                if cur.label[j] != c {
+                    // Equivilant to no children
+                    return 0;
+                }
+                j += 1;
+            } else {
+                if cur.children[idx].is_none() {
+                    return 0;
+                }
+                cur = cur.children[idx].as_mut().unwrap();
+                // First char is guarantee match alr, j = 1
+                j = 1;
+            }
+        }
+        cur.val
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -279,6 +463,57 @@ mod test {
         assert_eq!(t.get(0b1100), 0);
         assert_eq!(t.get(0b11101), 11);
         assert_eq!(t.get(0b11100), 0);
+    }
+
+    #[test]
+    fn ctrie_test() {
+        let emp: Vec<u8> = Vec::new();
+        let mut t = CTrie::new(&emp);
+        t.insert("abc".as_bytes());
+        assert_eq!(t.get("abc".as_bytes()), 1);
+        assert_eq!(t.get_1b1("abc".as_bytes()), 1);
+        t.insert("abc".as_bytes());
+        assert_eq!(t.get("abc".as_bytes()), 2);
+        assert_eq!(t.get_1b1("abc".as_bytes()), 2);
+        t.insert("abce".as_bytes());
+        assert_eq!(t.get("abcd".as_bytes()), 0);
+        assert_eq!(t.get("abce".as_bytes()), 1);
+        assert_eq!(t.get("abc".as_bytes()), 3);
+        assert_eq!(t.get("ab".as_bytes()), 3);
+        assert_eq!(t.get_1b1("abcd".as_bytes()), 0);
+        assert_eq!(t.get_1b1("abce".as_bytes()), 1);
+        assert_eq!(t.get_1b1("abc".as_bytes()), 3);
+        assert_eq!(t.get_1b1("ab".as_bytes()), 3);
+
+        t.insert("zzz".as_bytes());
+        assert_eq!(t.get("z".as_bytes()), 1);
+        assert_eq!(t.get("zz".as_bytes()), 1);
+        assert_eq!(t.get("zzz".as_bytes()), 1);
+        assert_eq!(t.get_1b1("z".as_bytes()), 1);
+        assert_eq!(t.get_1b1("zz".as_bytes()), 1);
+        assert_eq!(t.get_1b1("zzz".as_bytes()), 1);
+    }
+
+    #[test]
+    fn ctrie_test_2() {
+        let emp: Vec<u8> = Vec::new();
+        let mut t = CTrie::new(&emp);
+        t.insert("aba".as_bytes());
+        assert_eq!(t.get("aba".as_bytes()), 1);
+        assert_eq!(t.get_1b1("aba".as_bytes()), 1);
+        t.insert("ab".as_bytes());
+        assert_eq!(t.get("ab".as_bytes()), 2);
+        assert_eq!(t.get_1b1("ab".as_bytes()), 2);
+        assert_eq!(t.get("aba".as_bytes()), 1);
+        assert_eq!(t.get_1b1("aba".as_bytes()), 1);
+
+        t.insert("aaaaaaa".as_bytes());
+        t.insert("aaaaaa".as_bytes());
+        t.insert("aaaaa".as_bytes());
+        assert_eq!(t.get_1b1("aaaaaaa".as_bytes()), 1);
+        assert_eq!(t.get_1b1("aaaaaa".as_bytes()), 2);
+        assert_eq!(t.get_1b1("aaaaa".as_bytes()), 3);
+        assert_eq!(t.get_1b1("a".as_bytes()), 5);
     }
 
     #[test]

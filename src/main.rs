@@ -5,6 +5,7 @@ use std::{
     fmt::Debug,
     io::{self, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
+    mem,
     mem::swap,
     ops::Bound::*,
     ops::RangeBounds,
@@ -210,26 +211,211 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
-#[allow(dead_code)]
-// https://cp-algorithms.com/string/z-function.html
-fn z_function(s: &Vec<u8>) -> Vec<usize> {
-    let n = s.len();
-    let mut z = vec![0; n];
-    let mut l = 0;
-    let mut r = 0;
-    (1..n).for_each(|i| {
-        if i < r {
-            z[i] = min(r - i, z[i - l]);
+// Compressed trie to use when string is just too long.
+// Label are just reference so it's even more efficient.
+type CTrieLink<'a> = Option<Box<CTrieNode<'a>>>;
+
+struct CTrieNode<'a> {
+    val: i32,
+    children: [CTrieLink<'a>; 26],
+    label: &'a [u8],
+}
+
+const CREPEAT: Option<Box<CTrieNode>> = None;
+
+impl<'a> CTrieNode<'a> {
+    pub fn new(val: i32, label: &'a [u8]) -> Self {
+        CTrieNode {
+            val,
+            children: [CREPEAT; 26],
+            label,
         }
-        while (i + z[i] < n) && (s[z[i]] == s[i + z[i]]) {
-            z[i] += 1;
+    }
+}
+
+pub struct CTrie<'a> {
+    head: CTrieNode<'a>,
+}
+
+fn prefix_pos(label: &[u8], st: &[u8]) -> usize {
+    let mut pos = st.len();
+    for (i, &c) in st.iter().enumerate() {
+        if label.len() <= i {
+            pos = i;
+            break;
         }
-        if i + z[i] > r {
-            l = i;
-            r = i + z[i];
+        if c as u8 != label[i] {
+            pos = i;
+            break;
         }
-    });
-    z
+    }
+    pos
+}
+
+impl<'a> CTrie<'a> {
+    pub fn new(x: &'a [u8]) -> Self {
+        CTrie {
+            head: CTrieNode::new(0, x),
+        }
+    }
+
+    pub fn insert(&mut self, st: &'a [u8]) {
+        let mut cur = &mut self.head;
+        let mut rst = st;
+
+        loop {
+            let pos = prefix_pos(&cur.label, rst);
+            // Case 1: rst is a prefix of label
+            if pos == rst.len() {
+                if cur.label.len() == rst.len() {
+                    cur.val += 1;
+                    break;
+                }
+
+                let c_old = (cur.label[pos] - b'a') as usize;
+                let old_child_label = &cur.label[pos..];
+
+                // When break, combine all other children...
+                // Dance!
+                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
+                (0..26).for_each(
+                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
+                        Some(nd) => {
+                            new_node.children[c_idx] = Some(nd);
+                        }
+                        None => {}
+                    },
+                );
+                cur.children[c_old] = Some(new_node);
+                cur.label = &cur.label[..pos];
+                cur.val += 1;
+                break;
+            }
+            // Case 2: same prefix < label -> break up the label and add 2 childrens
+            if cur.label.len() > pos {
+                let c_old = (cur.label[pos] - b'a') as usize;
+                let c_new = (rst[pos] - b'a') as usize;
+
+                let old_label = &cur.label[..pos];
+                let old_child_label = &cur.label[pos..];
+                let new_child_label = &rst[pos..];
+
+                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
+                (0..26).for_each(
+                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
+                        Some(nd) => {
+                            new_node.children[c_idx] = Some(nd);
+                        }
+                        None => {}
+                    },
+                );
+                cur.children[c_old] = Some(new_node);
+
+                // New stuff always 1
+                cur.children[c_new] = Some(Box::new(CTrieNode::new(1, new_child_label)));
+
+                cur.val += 1; // count # prefix
+                cur.label = old_label;
+                break;
+            } else if cur.label.len() <= pos {
+                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
+                let c_new = (rst[pos] - b'a') as usize;
+                if cur.children[c_new].is_none() {
+                    // Add the whole (new so it's 1)
+                    cur.val += 1;
+                    cur.children[c_new] = Some(Box::new(CTrieNode::new(1, &rst[pos..])));
+                    break;
+                } else {
+                    cur.val += 1;
+                    cur = cur.children[c_new].as_mut().unwrap();
+                    rst = &rst[pos..];
+                }
+            }
+        }
+    }
+
+    pub fn get(&mut self, st: &[u8]) -> i32 {
+        let mut cur = &mut self.head;
+        let mut rst = st;
+
+        loop {
+            let pos = prefix_pos(&cur.label, rst);
+            // Case 1: rst is a prefix of label
+            if pos == rst.len() {
+                // println!("get case 1");
+                return cur.val;
+            }
+            // Case 2: same prefix < label -> Cannot be found
+            if cur.label.len() > pos {
+                return 0;
+            } else if cur.label.len() <= pos {
+                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
+                let c_new = (rst[pos] - b'a') as usize;
+                if cur.children[c_new].is_none() {
+                    return 0;
+                } else {
+                    cur = cur.children[c_new].as_mut().unwrap();
+                    rst = &rst[pos..];
+                }
+            }
+        }
+    }
+
+    // Emulate 1 by 1 child move for more intuitive search
+    pub fn get_1b1(&mut self, st: &[u8]) -> i32 {
+        let mut cur = &mut self.head;
+        let mut j = 0;
+        for &c in st.iter() {
+            let idx = (c - b'a') as usize;
+            if j < cur.label.len() {
+                if cur.label[j] != c {
+                    return 0;
+                }
+                j += 1;
+            } else {
+                if cur.children[idx].is_none() {
+                    return 0;
+                }
+                cur = cur.children[idx].as_mut().unwrap();
+                // First char is guarantee match alr, j = 1
+                j = 1;
+            }
+        }
+        return cur.val;
+    }
+
+    pub fn get_ans(&mut self, st: &[u8]) -> u64 {
+        let mut ans: u64 = 0;
+        let mut cur = &mut self.head;
+        let mut j = 0;
+        for i in (0..st.len()).rev() {
+            let idx = (st[i] - b'a') as usize;
+            // Count how many other nodes != c
+            let mut not_c = cur.val;
+            if j < cur.label.len() {
+                // Equivilant to no children
+                if cur.label[j] != st[i] {
+                    ans += (not_c as u64) * (i + 1) as u64;
+                    break;
+                }
+                // Has children = idx
+                j += 1;
+                not_c -= cur.val;
+                ans += (not_c as u64) * (i + 1) as u64;
+            } else {
+                if cur.children[idx].is_none() {
+                    ans += (not_c as u64) * (i + 1) as u64;
+                    break;
+                }
+                cur = cur.children[idx].as_mut().unwrap();
+                // First char is guarantee match alr, j = 1
+                j = 1;
+                not_c -= cur.val;
+                ans += (not_c as u64) * (i + 1) as u64;
+            }
+        }
+        ans
+    }
 }
 
 // =========================== End template here =======================
@@ -239,80 +425,21 @@ type V2<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
-    let t = read_1_number_(line, reader, 0);
-    (0..t).for_each(|_te| {
-        let (n, l, r) = read_3_number_(line, reader, 0usize);
+    // let t = read_1_number_(line, reader, 0);
+    // (0..t).for_each(|_te| {});
+    let m = read_1_number_(line, reader, 0usize);
+    let mut v: V<V<u8>> = V::new();
+    let emp: V<u8> = V::new();
+    let mut ctrie = CTrie::new(&emp);
+    (0..m).for_each(|_| {
         let s = read_line_str_as_vec_template(line, reader);
-        let z = z_function(&s);
-
-        let mut ans: V<usize> = vec![0; n + 1];
-        ans[1] = n;
-        let E: usize = (n as f32).sqrt() as usize + 1;
-        // Check each prefix to find the max split for it
-        (1..=E).for_each(|t| {
-            let mut cur_split = 1;
-            let mut j = t;
-            while j < n {
-                while j < n && z[j] < t {
-                    j += 1;
-                }
-                if j == n {
-                    break;
-                }
-                cur_split += 1;
-                ans[cur_split] = max(ans[cur_split], t);
-                j += t;
-            }
-        });
-        // println!("Case {_te}, z = {z:?}");
-        // Divide s into k substrings
-        (2..=E).for_each(|k| {
-            // println!("k = {k}");
-            // Binary search to find the max LCP
-            let mut l = 1;
-            let mut r = n;
-
-            let mut lp = 0;
-            while l <= r {
-                let mid = (l + r) / 2;
-                // println!("l = {l}, r = {r}, mid = {mid}, lp = {lp}");
-
-                // Find if can k split
-                let mut cur_split = 1;
-                let mut j = mid;
-                while j < n && cur_split < k {
-                    while j < n && z[j] < mid {
-                        j += 1;
-                    }
-                    // println!("j = {j}, cur = {cur_split}");
-                    if j == n {
-                        break;
-                    }
-                    cur_split += 1;
-                    j += mid;
-                }
-
-                // println!("Lastly cur = {cur_split}");
-
-                if cur_split >= k {
-                    lp = mid;
-                    l = mid + 1;
-                } else {
-                    r = mid - 1;
-                }
-            }
-
-            // Found the max LCP to split into k substrings
-            if lp != 0 {
-                ans[k] = max(ans[k], lp);
-            }
-        });
-
-        (l..=r).for_each(|i| {
-            write!(out, "{} ", ans[i]).unwrap();
-        });
-        writeln!(out).unwrap();
+        v.push(s);
     });
+    for s in v.iter() {
+        ctrie.insert(&s);
+    }
+    let ans: u64 = v.iter().map(|s| ctrie.get_ans(s)).sum();
+    writeln!(out, "{}", ans * 2).unwrap();
 }
 
 fn main() {
