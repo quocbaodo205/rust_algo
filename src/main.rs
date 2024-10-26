@@ -211,210 +211,60 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
-// Compressed trie to use when string is just too long.
-// Label are just reference so it's even more efficient.
-type CTrieLink<'a> = Option<Box<CTrieNode<'a>>>;
-
-struct CTrieNode<'a> {
-    val: i32,
-    children: [CTrieLink<'a>; 26],
-    label: &'a [u8],
+#[allow(dead_code)]
+struct FenwickTree {
+    len: usize,
+    bit: Vec<i32>,
 }
 
-const CREPEAT: Option<Box<CTrieNode>> = None;
-
-impl<'a> CTrieNode<'a> {
-    pub fn new(val: i32, label: &'a [u8]) -> Self {
-        CTrieNode {
-            val,
-            children: [CREPEAT; 26],
-            label,
-        }
-    }
-}
-
-pub struct CTrie<'a> {
-    head: CTrieNode<'a>,
-}
-
-fn prefix_pos(label: &[u8], st: &[u8]) -> usize {
-    let mut pos = st.len();
-    for (i, &c) in st.iter().enumerate() {
-        if label.len() <= i {
-            pos = i;
-            break;
-        }
-        if c as u8 != label[i] {
-            pos = i;
-            break;
-        }
-    }
-    pos
-}
-
-impl<'a> CTrie<'a> {
-    pub fn new(x: &'a [u8]) -> Self {
-        CTrie {
-            head: CTrieNode::new(0, x),
+#[allow(dead_code)]
+impl FenwickTree {
+    pub fn new(n: usize) -> Self {
+        FenwickTree {
+            len: n,
+            bit: vec![0; n],
         }
     }
 
-    pub fn insert(&mut self, st: &'a [u8]) {
-        let mut cur = &mut self.head;
-        let mut rst = st;
-
-        loop {
-            let pos = prefix_pos(&cur.label, rst);
-            // Case 1: rst is a prefix of label
-            if pos == rst.len() {
-                if cur.label.len() == rst.len() {
-                    cur.val += 1;
-                    break;
-                }
-
-                let c_old = (cur.label[pos] - b'a') as usize;
-                let old_child_label = &cur.label[pos..];
-
-                // When break, combine all other children...
-                // Dance!
-                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
-                (0..26).for_each(
-                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
-                        Some(nd) => {
-                            new_node.children[c_idx] = Some(nd);
-                        }
-                        None => {}
-                    },
-                );
-                cur.children[c_old] = Some(new_node);
-                cur.label = &cur.label[..pos];
-                cur.val += 1;
-                break;
-            }
-            // Case 2: same prefix < label -> break up the label and add 2 childrens
-            if cur.label.len() > pos {
-                let c_old = (cur.label[pos] - b'a') as usize;
-                let c_new = (rst[pos] - b'a') as usize;
-
-                let old_label = &cur.label[..pos];
-                let old_child_label = &cur.label[pos..];
-                let new_child_label = &rst[pos..];
-
-                let mut new_node = Box::new(CTrieNode::new(cur.val, old_child_label));
-                (0..26).for_each(
-                    |c_idx| match mem::replace(&mut cur.children[c_idx], CREPEAT) {
-                        Some(nd) => {
-                            new_node.children[c_idx] = Some(nd);
-                        }
-                        None => {}
-                    },
-                );
-                cur.children[c_old] = Some(new_node);
-
-                // New stuff always 1
-                cur.children[c_new] = Some(Box::new(CTrieNode::new(1, new_child_label)));
-
-                cur.val += 1; // count # prefix
-                cur.label = old_label;
-                break;
-            } else if cur.label.len() <= pos {
-                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
-                let c_new = (rst[pos] - b'a') as usize;
-                if cur.children[c_new].is_none() {
-                    // Add the whole (new so it's 1)
-                    cur.val += 1;
-                    cur.children[c_new] = Some(Box::new(CTrieNode::new(1, &rst[pos..])));
-                    break;
-                } else {
-                    cur.val += 1;
-                    cur = cur.children[c_new].as_mut().unwrap();
-                    rst = &rst[pos..];
-                }
-            }
+    // Sum range [0..r]
+    pub fn sum_full(&self, r: usize) -> i32 {
+        let mut r = r as i32;
+        let mut ret = 0;
+        while r >= 0 {
+            ret += self.bit[r as usize];
+            r = (r & (r + 1)) - 1;
         }
+        ret
     }
 
-    pub fn get(&mut self, st: &[u8]) -> i32 {
-        let mut cur = &mut self.head;
-        let mut rst = st;
-
-        loop {
-            let pos = prefix_pos(&cur.label, rst);
-            // Case 1: rst is a prefix of label
-            if pos == rst.len() {
-                // println!("get case 1");
-                return cur.val;
-            }
-            // Case 2: same prefix < label -> Cannot be found
-            if cur.label.len() > pos {
-                return 0;
-            } else if cur.label.len() <= pos {
-                // Case 3: same prefix > label -> Keep comparing with chilren with a reduced rst
-                let c_new = (rst[pos] - b'a') as usize;
-                if cur.children[c_new].is_none() {
-                    return 0;
-                } else {
-                    cur = cur.children[c_new].as_mut().unwrap();
-                    rst = &rst[pos..];
-                }
-            }
-        }
-    }
-
-    // Emulate 1 by 1 child move for more intuitive search
-    pub fn get_1b1(&mut self, st: &[u8]) -> i32 {
-        let mut cur = &mut self.head;
-        let mut j = 0;
-        for &c in st.iter() {
-            let idx = (c - b'a') as usize;
-            if j < cur.label.len() {
-                if cur.label[j] != c {
-                    return 0;
-                }
-                j += 1;
+    // Sum range [l..r]
+    // Usage: sum(1..=3) or sum(..10) or (7..)
+    pub fn sum<R: std::ops::RangeBounds<usize>>(&self, range: R) -> i32 {
+        let start: usize = match range.start_bound() {
+            std::ops::Bound::Included(x) => *x,
+            std::ops::Bound::Excluded(x) => *x + 1,
+            std::ops::Bound::Unbounded => 0,
+        };
+        let end: usize = match range.end_bound() {
+            std::ops::Bound::Included(x) => *x,
+            std::ops::Bound::Excluded(x) => *x - 1,
+            std::ops::Bound::Unbounded => self.len - 1,
+        };
+        self.sum_full(end)
+            - if start == 0 {
+                0
             } else {
-                if cur.children[idx].is_none() {
-                    return 0;
-                }
-                cur = cur.children[idx].as_mut().unwrap();
-                // First char is guarantee match alr, j = 1
-                j = 1;
+                self.sum_full(start - 1)
             }
-        }
-        return cur.val;
     }
 
-    pub fn get_ans(&mut self, st: &[u8]) -> u64 {
-        let mut ans: u64 = 0;
-        let mut cur = &mut self.head;
-        let mut j = 0;
-        for i in (0..st.len()).rev() {
-            let idx = (st[i] - b'a') as usize;
-            // Count how many other nodes != c
-            let mut not_c = cur.val;
-            if j < cur.label.len() {
-                // Equivilant to no children
-                if cur.label[j] != st[i] {
-                    ans += (not_c as u64) * (i + 1) as u64;
-                    break;
-                }
-                // Has children = idx
-                j += 1;
-                not_c -= cur.val;
-                ans += (not_c as u64) * (i + 1) as u64;
-            } else {
-                if cur.children[idx].is_none() {
-                    ans += (not_c as u64) * (i + 1) as u64;
-                    break;
-                }
-                cur = cur.children[idx].as_mut().unwrap();
-                // First char is guarantee match alr, j = 1
-                j = 1;
-                not_c -= cur.val;
-                ans += (not_c as u64) * (i + 1) as u64;
-            }
+    // Single add
+    pub fn add(&mut self, i: i32, delta: i32) {
+        let mut i = i;
+        while i < self.len as i32 {
+            self.bit[i as usize] += delta;
+            i = i | (i + 1);
         }
-        ans
     }
 }
 
@@ -426,20 +276,98 @@ type Set<T> = BTreeSet<T>;
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     // let t = read_1_number_(line, reader, 0);
-    // (0..t).for_each(|_te| {});
-    let m = read_1_number_(line, reader, 0usize);
-    let mut v: V<V<u8>> = V::new();
-    let emp: V<u8> = V::new();
-    let mut ctrie = CTrie::new(&emp);
+    // (0..t).for_each(|_te| {
+    // });
+    let (n, m, q) = read_3_number_(line, reader, 0usize);
+    let mut s = read_line_binary_template(line, reader);
+
+    let mut v: V<usize> = V::new();
+    let mut used: V<bool> = vec![false; n];
+    // Jump to the next unused position fast.
+    let mut next_not_use: V<usize> = (1..n + 1).collect();
+
     (0..m).for_each(|_| {
-        let s = read_line_str_as_vec_template(line, reader);
-        v.push(s);
+        let (l, r) = read_2_number_(line, reader, 0usize);
+        let (l, r) = (l - 1, r - 1);
+
+        let mut stk: V<usize> = V::new();
+        let mut i = l;
+        while i <= r {
+            if !used[i] {
+                used[i] = true;
+                v.push(i);
+                stk.push(i);
+            }
+            i = next_not_use[i];
+        }
+
+        while !stk.is_empty() {
+            let lt = stk.pop().unwrap();
+            let nx = next_not_use[lt];
+            if nx < n && used[nx] {
+                next_not_use[lt] = next_not_use[nx];
+            }
+        }
     });
-    for s in v.iter() {
-        ctrie.insert(&s);
-    }
-    let ans: u64 = v.iter().map(|s| ctrie.get_ans(s)).sum();
-    writeln!(out, "{}", ans * 2).unwrap();
+
+    let mut ord_s: V<u8> = v.iter().map(|&i| s[i]).collect();
+    let mut mp: V<usize> = vec![n; n];
+    v.iter().enumerate().for_each(|(i, &c)| mp[c] = i);
+    let mut num_spare: usize = (0..n)
+        .filter_map(|i| {
+            if mp[i] != n {
+                return None;
+            }
+            Some(s[i] as usize)
+        })
+        .sum();
+
+    // println!("s = {s:?}, v = {v:?}, ord_s = {ord_s:?}, mp = {mp:?}, spare = {num_spare:?}");
+
+    let mut fw = FenwickTree::new(ord_s.len());
+    ord_s
+        .iter()
+        .enumerate()
+        .for_each(|(i, &c)| fw.add(i as i32, c as i32));
+
+    (0..q).for_each(|qq| {
+        let p = read_1_number_(line, reader, 0usize);
+        let p = p - 1;
+        // println!("Case {qq} flip {p}, s[{p}] = {}", s[p]);
+
+        if mp[p] != n {
+            // Is inside
+            let in_pos = mp[p];
+            if ord_s[in_pos] == 1 {
+                fw.add(in_pos as i32, -1);
+            } else {
+                fw.add(in_pos as i32, 1);
+            }
+            ord_s[in_pos] = 1 - ord_s[in_pos];
+        } else {
+            // A spare
+            if s[p] == 1 {
+                num_spare -= 1;
+            } else {
+                num_spare += 1;
+            }
+            s[p] = 1 - s[p];
+        }
+        // println!("After flip, s = {s:?}, ord_s = {ord_s:?}");
+
+        let num1 = fw.sum(..);
+        let num0 = ord_s.len() - num1 as usize;
+        // println!("After flip, num spare = {num_spare}, num1 = {num1}, num0 = {num0}");
+        if num0 < num_spare {
+            // println!("Use all spare to fill up all 0");
+            writeln!(out, "{}", num0).unwrap();
+        } else {
+            let prx = num1 as usize + num_spare;
+            let prx1 = fw.sum(..prx);
+            // println!("Can make maximum {prx} 1s, prefix have {prx1} 1s");
+            writeln!(out, "{}", prx - prx1 as usize).unwrap();
+        }
+    });
 }
 
 fn main() {
