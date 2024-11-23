@@ -189,6 +189,27 @@ impl Combinatoric {
     }
 }
 
+#[allow(dead_code)]
+// Find combination if <num> positions. Useful for include / exclude.
+fn combination(
+    v: &Vec<usize>,
+    idx: usize,
+    num: usize,
+    cur_st: &mut Vec<usize>,
+    cur_ans: usize,
+    ans: &mut Vec<usize>,
+) {
+    if cur_st.len() == num {
+        ans.push(cur_ans);
+        return;
+    }
+    (idx..v.len()).for_each(|i| {
+        cur_st.push(i);
+        combination(v, i + 1, num, cur_st, cur_ans * v[i], ans);
+        cur_st.pop();
+    });
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

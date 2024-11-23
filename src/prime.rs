@@ -30,3 +30,22 @@ fn linear_sieve() -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     // prime -> index mapping
     (lp, pr, idx)
 }
+
+#[allow(dead_code)]
+fn prime_list(a: usize, lp: &Vec<usize>) -> Vec<usize> {
+    let mut x = a;
+    let mut f: Vec<usize> = Vec::new();
+    if lp[x] == x {
+        // Is a prime number
+        f.push(x);
+    } else {
+        while x > 1 {
+            let q = lp[x];
+            f.push(q);
+            while x % q == 0 {
+                x /= q;
+            }
+        }
+    }
+    f
+}

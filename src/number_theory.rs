@@ -1,6 +1,5 @@
 #[allow(dead_code)]
 
-// TODO: https://codeforces.com/contest/547/problem/C
 fn mobius() -> Vec<i8> {
     let mut tag: Vec<bool> = vec![false; 1000001];
     let mut pr: Vec<usize> = Vec::new();

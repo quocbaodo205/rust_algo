@@ -211,163 +211,148 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
-#[allow(dead_code)]
-struct FenwickTree {
-    len: usize,
-    bit: Vec<i32>,
-}
-
-#[allow(dead_code)]
-impl FenwickTree {
-    pub fn new(n: usize) -> Self {
-        FenwickTree {
-            len: n,
-            bit: vec![0; n],
-        }
-    }
-
-    // Sum range [0..r]
-    pub fn sum_full(&self, r: usize) -> i32 {
-        let mut r = r as i32;
-        let mut ret = 0;
-        while r >= 0 {
-            ret += self.bit[r as usize];
-            r = (r & (r + 1)) - 1;
-        }
-        ret
-    }
-
-    // Sum range [l..r]
-    // Usage: sum(1..=3) or sum(..10) or (7..)
-    pub fn sum<R: std::ops::RangeBounds<usize>>(&self, range: R) -> i32 {
-        let start: usize = match range.start_bound() {
-            std::ops::Bound::Included(x) => *x,
-            std::ops::Bound::Excluded(x) => *x + 1,
-            std::ops::Bound::Unbounded => 0,
-        };
-        let end: usize = match range.end_bound() {
-            std::ops::Bound::Included(x) => *x,
-            std::ops::Bound::Excluded(x) => *x - 1,
-            std::ops::Bound::Unbounded => self.len - 1,
-        };
-        self.sum_full(end)
-            - if start == 0 {
-                0
-            } else {
-                self.sum_full(start - 1)
-            }
-    }
-
-    // Single add
-    pub fn add(&mut self, i: i32, delta: i32) {
-        let mut i = i;
-        while i < self.len as i32 {
-            self.bit[i as usize] += delta;
-            i = i | (i + 1);
-        }
-    }
-}
-
 // =========================== End template here =======================
 
 type V<T> = Vec<T>;
 type V2<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
 
+fn mobius(n: usize) -> Vec<i8> {
+    let mut tag: Vec<bool> = vec![false; n + 1];
+    let mut pr: Vec<usize> = Vec::new();
+    let mut mu: Vec<i8> = vec![0; n + 1];
+    mu[1] = 1;
+    let c = n as u64;
+    (2..=n).for_each(|i| {
+        if !tag[i] {
+            pr.push(i);
+            mu[i] = -1;
+        }
+        let mut j = 0;
+        while j < pr.len() && (i as u64) * (pr[j] as u64) <= c {
+            tag[i * pr[j]] = true;
+            if i % pr[j] != 0 {
+                mu[i * pr[j]] = -mu[i];
+            } else {
+                break;
+            }
+            j += 1;
+        }
+    });
+    mu
+}
+
+#[allow(dead_code)]
+// List primes <= 10^7
+fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+    let mut lp: Vec<usize> = vec![0; n + 1];
+    let mut pr: Vec<usize> = Vec::new();
+    let mut idx: Vec<usize> = vec![0; n + 1];
+    let c = n as u64;
+    unsafe {
+        (2..=n).for_each(|i| {
+            if lp.get_unchecked(i) == &0 {
+                lp[i] = i;
+                pr.push(i);
+            }
+            let mut j = 0;
+            while j < pr.len()
+                && *pr.get_unchecked(j) <= *lp.get_unchecked(i)
+                && (i as u64) * (*pr.get_unchecked(j) as u64) <= c
+            {
+                lp[i * *pr.get_unchecked(j)] = *pr.get_unchecked(j);
+                j += 1;
+            }
+        });
+    }
+    // Mapping: prime -> index
+    pr.iter().enumerate().for_each(|(i, &prime)| {
+        idx[prime] = i + 1;
+    });
+    // Lowest prime factor
+    // list of prime number
+    // prime -> index mapping
+    (lp, pr, idx)
+}
+
+#[allow(dead_code)]
+// To be used with the mobius function,
+// so only care p1*p2,... not p1^2, p1^3... since modibus(d) = 0 anyway.
+fn factors_mu(a: usize, lp: &Vec<usize>) -> Vec<usize> {
+    let mut x = a;
+    let mut f: Vec<usize> = Vec::new();
+    f.push(1);
+    if lp[x] == x {
+        // Is a prime number
+        f.push(x);
+    } else {
+        while x > 1 {
+            let q = lp[x];
+            while x % q == 0 {
+                x /= q;
+            }
+            let len = f.len();
+            (0..len).for_each(|i| {
+                f.push(f[i] * q);
+            });
+        }
+    }
+    f
+}
+
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     // let t = read_1_number_(line, reader, 0);
-    // (0..t).for_each(|_te| {
-    // });
-    let (n, m, q) = read_3_number_(line, reader, 0usize);
-    let mut s = read_line_binary_template(line, reader);
-
-    let mut v: V<usize> = V::new();
-    let mut used: V<bool> = vec![false; n];
-    // Jump to the next unused position fast.
-    let mut next_not_use: V<usize> = (1..n + 1).collect();
-
-    (0..m).for_each(|_| {
-        let (l, r) = read_2_number_(line, reader, 0usize);
-        let (l, r) = (l - 1, r - 1);
-
-        let mut stk: V<usize> = V::new();
-        let mut i = l;
-        while i <= r {
-            if !used[i] {
-                used[i] = true;
-                v.push(i);
-                stk.push(i);
-            }
-            i = next_not_use[i];
-        }
-
-        while !stk.is_empty() {
-            let lt = stk.pop().unwrap();
-            let nx = next_not_use[lt];
-            if nx < n && used[nx] {
-                next_not_use[lt] = next_not_use[nx];
-            }
-        }
-    });
-
-    let mut ord_s: V<u8> = v.iter().map(|&i| s[i]).collect();
-    let mut mp: V<usize> = vec![n; n];
-    v.iter().enumerate().for_each(|(i, &c)| mp[c] = i);
-    let mut num_spare: usize = (0..n)
-        .filter_map(|i| {
-            if mp[i] != n {
-                return None;
-            }
-            Some(s[i] as usize)
-        })
-        .sum();
-
-    // println!("s = {s:?}, v = {v:?}, ord_s = {ord_s:?}, mp = {mp:?}, spare = {num_spare:?}");
-
-    let mut fw = FenwickTree::new(ord_s.len());
-    ord_s
+    // (0..t).for_each(|_te| {});
+    let n = read_1_number_(line, reader, 0usize);
+    let p = read_vec_template(line, reader, 0usize);
+    let (lp, _, _) = linear_sieve(n);
+    let mu = mobius(n);
+    let nmu: V<(usize, i8)> = mu
         .iter()
+        .cloned()
         .enumerate()
-        .for_each(|(i, &c)| fw.add(i as i32, c as i32));
-
-    (0..q).for_each(|qq| {
-        let p = read_1_number_(line, reader, 0usize);
-        let p = p - 1;
-        // println!("Case {qq} flip {p}, s[{p}] = {}", s[p]);
-
-        if mp[p] != n {
-            // Is inside
-            let in_pos = mp[p];
-            if ord_s[in_pos] == 1 {
-                fw.add(in_pos as i32, -1);
-            } else {
-                fw.add(in_pos as i32, 1);
+        .filter(|&(_, x)| x != 0)
+        .collect();
+    let mut c1 = vec![0i64; n + 1];
+    let mut c2 = vec![0i64; n + 1];
+    let mut c3: V<BTreeMap<usize, i64>> = vec![BTreeMap::new(); n + 1];
+    (1..=n).for_each(|i| {
+        let p1 = factors_mu(i, &lp);
+        p1.iter().for_each(|&x| c1[x] += 1);
+        let p2 = factors_mu(p[i - 1], &lp);
+        p2.iter().for_each(|&x| c2[x] += 1);
+        p1.iter().for_each(|&a| {
+            if mu[a] == 0 {
+                return;
             }
-            ord_s[in_pos] = 1 - ord_s[in_pos];
-        } else {
-            // A spare
-            if s[p] == 1 {
-                num_spare -= 1;
-            } else {
-                num_spare += 1;
-            }
-            s[p] = 1 - s[p];
-        }
-        // println!("After flip, s = {s:?}, ord_s = {ord_s:?}");
-
-        let num1 = fw.sum(..);
-        let num0 = ord_s.len() - num1 as usize;
-        // println!("After flip, num spare = {num_spare}, num1 = {num1}, num0 = {num0}");
-        if num0 < num_spare {
-            // println!("Use all spare to fill up all 0");
-            writeln!(out, "{}", num0).unwrap();
-        } else {
-            let prx = num1 as usize + num_spare;
-            let prx1 = fw.sum(..prx);
-            // println!("Can make maximum {prx} 1s, prefix have {prx1} 1s");
-            writeln!(out, "{}", prx - prx1 as usize).unwrap();
-        }
+            p2.iter().for_each(|&b| {
+                if mu[b] == 0 {
+                    return;
+                }
+                if !c3[a].contains_key(&b) {
+                    c3[a].insert(b, 0);
+                }
+                *(c3[a].get_mut(&b).unwrap()) += 1;
+            });
+        });
     });
+    c1.iter_mut().for_each(|x| *x = (*x * ((*x) + 1)) / 2);
+    c2.iter_mut().for_each(|x| *x = (*x * ((*x) + 1)) / 2);
+
+    let mut ans = ((n as i64) * (n as i64 + 1)) / 2;
+    nmu.iter().for_each(|&(d, md)| {
+        let v1 = md as i64 * c1[d];
+        let v2 = md as i64 * c2[d];
+        ans = ans - v1 - v2;
+    });
+
+    nmu.iter().for_each(|&(a, md)| {
+        c3[a]
+            .iter()
+            .for_each(|(&b, &c)| ans += md as i64 * mu[b] as i64 * ((c * (c + 1)) / 2));
+    });
+
+    writeln!(out, "{ans}").unwrap();
 }
 
 fn main() {
