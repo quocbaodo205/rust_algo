@@ -16,6 +16,7 @@ pub mod dsu;
 pub mod fenw;
 pub mod game;
 pub mod modint;
+pub mod number_theory;
 pub mod prime;
 pub mod rng;
 pub mod root_tree;
