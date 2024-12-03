@@ -1,14 +1,11 @@
 use std::{
     cmp::{max, min, Ordering},
-    collections::{BTreeMap, BTreeSet},
-    fmt::write,
-    fmt::Debug,
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    fmt::{write, Debug},
     io::{self, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
-    mem,
-    mem::swap,
-    ops::Bound::*,
-    ops::RangeBounds,
+    mem::{self, swap},
+    ops::{self, Bound::*, RangeBounds},
     str::FromStr,
 };
 
@@ -118,7 +115,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 #[allow(dead_code)]
 fn true_distance_sq(a: (i64, i64), b: (i64, i64)) -> i64 {
     let x = (a.0 - b.0) * (a.0 - b.0) + (a.1 - b.1) * (a.1 - b.1);
-    // println!("Dist sq {:?} - {:?} = {}", a, b, x);
     return x;
 }
 
@@ -211,148 +207,98 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
+// Template for grid movement
+#[derive(Copy, Clone, Debug)]
+struct Point((i32, i32));
+
+impl ops::Add for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Point((self.0 .0 + rhs.0 .0, self.0 .1 + rhs.0 .1))
+    }
+}
+
+impl ops::Sub for Point {
+    type Output = Point;
+
+    fn sub(self, rhs: Point) -> Self::Output {
+        Point((self.0 .0 - rhs.0 .0, self.0 .1 - rhs.0 .1))
+    }
+}
+
+#[allow(dead_code)]
+fn is_valid_point(x: Point, n: usize, m: usize) -> bool {
+    return x.0 .0 >= 0 && x.0 .0 < n as i32 && x.0 .1 >= 0 && x.0 .1 < m as i32;
+}
+
+#[allow(dead_code)]
+// Translate a character to a directional Point
+fn translate(c: u8) -> Point {
+    match c as char {
+        'U' => Point((-1, 0)),
+        'D' => Point((1, 0)),
+        'L' => Point((0, -1)),
+        'R' => Point((0, 1)),
+        _ => Point((0, 0)),
+    }
+}
+
+#[allow(dead_code)]
+// Simple DFS from a point, using a map of direction LRUD
+fn dfs_grid(s: Point, mp: &V<V<u8>>, checked: &mut V<V<bool>>) {
+    let n = mp.len();
+    let m = mp[0].len();
+
+    if checked[s.0 .0 as usize][s.0 .1 as usize] {
+        return;
+    }
+    let mut s = Some(s);
+    while let Some(u) = s {
+        checked[u.0 .0 as usize][u.0 .1 as usize] = true;
+        let v = u + translate(mp[u.0 .0 as usize][u.0 .1 as usize]);
+        s = match is_valid_point(v, n, m) && !checked[v.0 .0 as usize][v.0 .1 as usize] {
+            true => Some(v),
+            false => None,
+        }
+    }
+}
+
+#[allow(dead_code)]
+// Simple BFS from a point, using a blocker map
+fn flood_grid(s: Point, blocked: &V<V<bool>>, checked: &mut V<V<bool>>) {
+    let n = blocked.len();
+    let m = blocked[0].len();
+
+    if checked[s.0 .0 as usize][s.0 .1 as usize] {
+        return;
+    }
+    let mut q: VecDeque<Point> = VecDeque::new();
+    let direction = "LRUD".as_bytes();
+    q.push_back(s);
+    while let Some(u) = q.pop_front() {
+        direction.iter().for_each(|&d| {
+            let v = u + translate(d);
+            if is_valid_point(v, n, m)
+                && !checked[v.0 .0 as usize][v.0 .1 as usize]
+                && !blocked[v.0 .0 as usize][v.0 .1 as usize]
+            {
+                q.push_back(v);
+            }
+        });
+    }
+}
+
 // =========================== End template here =======================
 
 type V<T> = Vec<T>;
 type V2<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
-
-fn mobius(n: usize) -> Vec<i8> {
-    let mut tag: Vec<bool> = vec![false; n + 1];
-    let mut pr: Vec<usize> = Vec::new();
-    let mut mu: Vec<i8> = vec![0; n + 1];
-    mu[1] = 1;
-    let c = n as u64;
-    (2..=n).for_each(|i| {
-        if !tag[i] {
-            pr.push(i);
-            mu[i] = -1;
-        }
-        let mut j = 0;
-        while j < pr.len() && (i as u64) * (pr[j] as u64) <= c {
-            tag[i * pr[j]] = true;
-            if i % pr[j] != 0 {
-                mu[i * pr[j]] = -mu[i];
-            } else {
-                break;
-            }
-            j += 1;
-        }
-    });
-    mu
-}
-
-#[allow(dead_code)]
-// List primes <= 10^7
-fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-    let mut lp: Vec<usize> = vec![0; n + 1];
-    let mut pr: Vec<usize> = Vec::new();
-    let mut idx: Vec<usize> = vec![0; n + 1];
-    let c = n as u64;
-    unsafe {
-        (2..=n).for_each(|i| {
-            if lp.get_unchecked(i) == &0 {
-                lp[i] = i;
-                pr.push(i);
-            }
-            let mut j = 0;
-            while j < pr.len()
-                && *pr.get_unchecked(j) <= *lp.get_unchecked(i)
-                && (i as u64) * (*pr.get_unchecked(j) as u64) <= c
-            {
-                lp[i * *pr.get_unchecked(j)] = *pr.get_unchecked(j);
-                j += 1;
-            }
-        });
-    }
-    // Mapping: prime -> index
-    pr.iter().enumerate().for_each(|(i, &prime)| {
-        idx[prime] = i + 1;
-    });
-    // Lowest prime factor
-    // list of prime number
-    // prime -> index mapping
-    (lp, pr, idx)
-}
-
-#[allow(dead_code)]
-// To be used with the mobius function,
-// so only care p1*p2,... not p1^2, p1^3... since modibus(d) = 0 anyway.
-fn factors_mu(a: usize, lp: &Vec<usize>) -> Vec<usize> {
-    let mut x = a;
-    let mut f: Vec<usize> = Vec::new();
-    f.push(1);
-    if lp[x] == x {
-        // Is a prime number
-        f.push(x);
-    } else {
-        while x > 1 {
-            let q = lp[x];
-            while x % q == 0 {
-                x /= q;
-            }
-            let len = f.len();
-            (0..len).for_each(|i| {
-                f.push(f[i] * q);
-            });
-        }
-    }
-    f
-}
+type Map<K, V> = BTreeMap<K, V>;
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
-    // let t = read_1_number_(line, reader, 0);
-    // (0..t).for_each(|_te| {});
-    let n = read_1_number_(line, reader, 0usize);
-    let p = read_vec_template(line, reader, 0usize);
-    let (lp, _, _) = linear_sieve(n);
-    let mu = mobius(n);
-    let nmu: V<(usize, i8)> = mu
-        .iter()
-        .cloned()
-        .enumerate()
-        .filter(|&(_, x)| x != 0)
-        .collect();
-    let mut c1 = vec![0i64; n + 1];
-    let mut c2 = vec![0i64; n + 1];
-    let mut c3: V<BTreeMap<usize, i64>> = vec![BTreeMap::new(); n + 1];
-    (1..=n).for_each(|i| {
-        let p1 = factors_mu(i, &lp);
-        p1.iter().for_each(|&x| c1[x] += 1);
-        let p2 = factors_mu(p[i - 1], &lp);
-        p2.iter().for_each(|&x| c2[x] += 1);
-        p1.iter().for_each(|&a| {
-            if mu[a] == 0 {
-                return;
-            }
-            p2.iter().for_each(|&b| {
-                if mu[b] == 0 {
-                    return;
-                }
-                if !c3[a].contains_key(&b) {
-                    c3[a].insert(b, 0);
-                }
-                *(c3[a].get_mut(&b).unwrap()) += 1;
-            });
-        });
-    });
-    c1.iter_mut().for_each(|x| *x = (*x * ((*x) + 1)) / 2);
-    c2.iter_mut().for_each(|x| *x = (*x * ((*x) + 1)) / 2);
-
-    let mut ans = ((n as i64) * (n as i64 + 1)) / 2;
-    nmu.iter().for_each(|&(d, md)| {
-        let v1 = md as i64 * c1[d];
-        let v2 = md as i64 * c2[d];
-        ans = ans - v1 - v2;
-    });
-
-    nmu.iter().for_each(|&(a, md)| {
-        c3[a]
-            .iter()
-            .for_each(|(&b, &c)| ans += md as i64 * mu[b] as i64 * ((c * (c + 1)) / 2));
-    });
-
-    writeln!(out, "{ans}").unwrap();
+    let t = read_1_number_(line, reader, 0);
+    (0..t).for_each(|_te| {});
 }
 
 fn main() {
