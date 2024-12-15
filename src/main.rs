@@ -1,11 +1,12 @@
 use std::{
+    borrow::BorrowMut,
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::{write, Debug},
     io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
     mem::{self, swap},
-    ops::{self, Bound::*, RangeBounds},
+    ops::{self, Bound::*, DerefMut, RangeBounds},
     str::FromStr,
 };
 
@@ -207,89 +208,6 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
-// Template for grid movement
-#[derive(Copy, Clone, Debug)]
-struct Point((i32, i32));
-
-impl ops::Add for Point {
-    type Output = Point;
-
-    fn add(self, rhs: Point) -> Self::Output {
-        Point((self.0 .0 + rhs.0 .0, self.0 .1 + rhs.0 .1))
-    }
-}
-
-impl ops::Sub for Point {
-    type Output = Point;
-
-    fn sub(self, rhs: Point) -> Self::Output {
-        Point((self.0 .0 - rhs.0 .0, self.0 .1 - rhs.0 .1))
-    }
-}
-
-#[allow(dead_code)]
-fn is_valid_point(x: Point, n: usize, m: usize) -> bool {
-    return x.0 .0 >= 0 && x.0 .0 < n as i32 && x.0 .1 >= 0 && x.0 .1 < m as i32;
-}
-
-#[allow(dead_code)]
-// Translate a character to a directional Point
-fn translate(c: u8) -> Point {
-    match c as char {
-        'U' => Point((-1, 0)),
-        'D' => Point((1, 0)),
-        'L' => Point((0, -1)),
-        'R' => Point((0, 1)),
-        _ => Point((0, 0)),
-    }
-}
-
-#[allow(dead_code)]
-// Simple DFS from a point, using a map of direction LRUD
-fn dfs_grid(s: Point, mp: &V<V<u8>>, checked: &mut V<V<bool>>) {
-    let n = mp.len();
-    let m = mp[0].len();
-
-    if checked[s.0 .0 as usize][s.0 .1 as usize] {
-        return;
-    }
-    let mut s = Some(s);
-    while let Some(u) = s {
-        checked[u.0 .0 as usize][u.0 .1 as usize] = true;
-        let v = u + translate(mp[u.0 .0 as usize][u.0 .1 as usize]);
-        s = match is_valid_point(v, n, m) && !checked[v.0 .0 as usize][v.0 .1 as usize] {
-            true => Some(v),
-            false => None,
-        }
-    }
-}
-
-#[allow(dead_code)]
-// Simple BFS from a point, using a blocker map
-fn flood_grid(s: Point, blocked: &V<V<bool>>, checked: &mut V<V<bool>>) {
-    let n = blocked.len();
-    let m = blocked[0].len();
-
-    if checked[s.0 .0 as usize][s.0 .1 as usize] {
-        return;
-    }
-    let mut q: VecDeque<Point> = VecDeque::new();
-    let direction = "LRUD".as_bytes();
-    q.push_back(s);
-    while let Some(u) = q.pop_front() {
-        direction.iter().for_each(|&d| {
-            let v = u + translate(d);
-            if is_valid_point(v, n, m)
-                && !checked[v.0 .0 as usize][v.0 .1 as usize]
-                && !blocked[v.0 .0 as usize][v.0 .1 as usize]
-            {
-                checked[v.0 .0 as usize][v.0 .1 as usize] = true;
-                q.push_back(v);
-            }
-        });
-    }
-}
-
 // =========================== End template here =======================
 
 type V<T> = Vec<T>;
@@ -299,90 +217,10 @@ type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
 
-fn linear_sieve() -> (Vec<usize>, Vec<usize>, Vec<usize>) {
-    let mut lp: Vec<usize> = vec![0; 1000001];
-    let mut pr: Vec<usize> = Vec::new();
-    let mut idx: Vec<usize> = vec![0; 1000001];
-    let c = 1000000u64;
-    unsafe {
-        (2..=1000000).for_each(|i| {
-            if lp.get_unchecked(i) == &0 {
-                lp[i] = i;
-                pr.push(i);
-            }
-            let mut j = 0;
-            while j < pr.len()
-                && *pr.get_unchecked(j) <= *lp.get_unchecked(i)
-                && (i as u64) * (*pr.get_unchecked(j) as u64) <= c
-            {
-                lp[i * *pr.get_unchecked(j)] = *pr.get_unchecked(j);
-                j += 1;
-            }
-        });
-    }
-    // Mapping: prime -> index
-    pr.iter().enumerate().for_each(|(i, &prime)| {
-        idx[prime] = i + 1;
-    });
-    // Lowest prime factor
-    // list of prime number
-    // prime -> index mapping
-    (lp, pr, idx)
-}
-
-fn prime_factorize(x: usize, lp: &Vec<usize>) -> Vec<(usize, usize)> {
-    let mut ans: Vec<(usize, usize)> = Vec::new();
-
-    let mut x = x;
-    while x > 1 {
-        let k = lp[x];
-        let mut count = 0;
-        while x % k == 0 {
-            x /= k;
-            count += 1;
-        }
-        ans.push((k, count));
-    }
-
-    ans
-}
-
 fn solve(re: &mut BufReader<Stdin>, li: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number_(li, re, 0);
     let df = 0usize;
-    let (lp, pr, _) = linear_sieve();
-    let count_pr: V<US> = (0..=100000)
-        .map(|i| {
-            if i < 2 {
-                return 1;
-            }
-            let ft = prime_factorize(i, &lp);
-            ft.iter().map(|(_, q)| q).sum()
-        })
-        .collect();
-
-    (0..t).for_each(|_te| {
-        let (n, m) = read_2_number_(li, re, df);
-        let mut a = read_vec_template(li, re, df);
-        a.sort();
-        a.reverse();
-
-        let mut ans = vec![0; n + 1];
-        ans[1] = a[0];
-        for i in 2..=n {
-            // println!("prime factors of {i}: {:?}", prime_factorize(i, &lp));
-            if count_pr[i] >= a.len() {
-                writeln!(out, "-1").unwrap();
-                return;
-            }
-            ans[i] = a[count_pr[i]];
-        }
-
-        ans[1..].iter().for_each(|&x| {
-            write!(out, "{x} ").unwrap();
-        });
-        writeln!(out).unwrap();
-    });
+    (0..t).for_each(|_te| {});
 }
 
 fn main() {

@@ -11,6 +11,7 @@ fn get_log_2(x: u32) -> u32 {
     count
 }
 
+pub mod basic_graph;
 pub mod comb;
 pub mod dsu;
 pub mod fenw;
