@@ -74,7 +74,3 @@ fn is_palindrome(s: &[u8]) -> bool {
     }
     true
 }
-
-fn get_c(c: u8) -> usize {
-    (c - 'a' as u8) as usize
-}
