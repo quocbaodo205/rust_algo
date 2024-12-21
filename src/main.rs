@@ -2,7 +2,7 @@ use std::{
     borrow::BorrowMut,
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet, VecDeque},
-    fmt::{write, Debug},
+    fmt::{write, Debug, Display},
     io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     iter::zip,
     mem::{self, swap},
@@ -44,7 +44,7 @@ fn read_vec_template<T: FromStr + Copy>(
 }
 
 #[allow(dead_code)]
-fn read_1_number_<T: FromStr + Copy>(
+fn read_1_number<T: FromStr + Copy>(
     line: &mut String,
     reader: &mut BufReader<Stdin>,
     default: T,
@@ -54,7 +54,7 @@ fn read_1_number_<T: FromStr + Copy>(
 }
 
 #[allow(dead_code)]
-fn read_2_number_<T: FromStr + Copy>(
+fn read_2_number<T: FromStr + Copy>(
     line: &mut String,
     reader: &mut BufReader<Stdin>,
     default: T,
@@ -83,17 +83,17 @@ fn read_vec_string_template(line: &mut String, reader: &mut BufReader<Stdin>) ->
 #[allow(unused_macros)]
 macro_rules! isOn {
     ($S:expr, $b:expr) => {
-        ($S & (1u64 << $b)) > 0
+        ($S & (1 << $b)) > 0
     };
 }
 
 #[allow(unused_macros)]
 macro_rules! turnOn {
     ($S:ident, $b:expr) => {
-        $S |= (1u64 << $b)
+        $S |= (1 << $b)
     };
     ($S:expr, $b:expr) => {
-        $S | (164 << $b)
+        $S | (1 << $b)
     };
 }
 
@@ -208,8 +208,6 @@ fn num_digit(x: u64) -> u64 {
     return c;
 }
 
-// =========================== End template here =======================
-
 type V<T> = Vec<T>;
 type VV<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
@@ -217,10 +215,75 @@ type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
 
+// =========================== IO for classic problems =======================
+
+#[allow(dead_code)]
+fn read_n_and_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (T, V<T>) {
+    let n = read_1_number(line, reader, default);
+    let v = read_vec_template(line, reader, default);
+    (n, v)
+}
+
+#[allow(dead_code)]
+fn better_array_debug<T>(a: &V<T>)
+where
+    T: Debug,
+{
+    a.iter()
+        .enumerate()
+        .for_each(|(i, x)| println!("{i}: {x:?}"));
+}
+
+// 2 array need to have the same length
+#[allow(dead_code)]
+fn better_2_array_debug<T, D>(a: &V<T>, b: &V<D>)
+where
+    T: Debug,
+    D: Debug,
+{
+    (0..a.len()).for_each(|i| {
+        println!("{i}: {:?} -- {:?}", a[i], b[i]);
+    })
+}
+
+#[allow(dead_code)]
+fn array_output<T>(a: &V<T>, out: &mut BufWriter<Stdout>)
+where
+    T: Display,
+{
+    a.iter().for_each(|x| {
+        write!(out, "{x} ").unwrap();
+    });
+    writeln!(out).unwrap();
+}
+
+const MOD: i64 = 998244353;
+
+// =========================== End template here =======================
+
 fn solve(re: &mut BufReader<Stdin>, li: &mut String, out: &mut BufWriter<Stdout>) {
-    let t = read_1_number_(li, re, 0);
+    let t = read_1_number(li, re, 0);
     let df = 0usize;
-    (0..t).for_each(|_te| {});
+    (0..t).for_each(|_te| {
+        let (n, m) = read_2_number(li, re, df);
+        if m > 2 * n - 1 {
+            writeln!(out, "NO").unwrap();
+            return;
+        }
+        writeln!(out, "YES").unwrap();
+        // 0 -> 0, 1 -> 0: same color 0, 2 -> 0, 3 -> 0 same color 1, ...
+        // => i->0, i+1->0: color = i/2
+        // Next: cycle the color list of i->0: 1 1 2 2 3 3 ... x x => 1 2 2 3 3 ... x 1
+        (0..2 * n).for_each(|i| {
+            // let a: V<US> = (0..m).map(|j| (i / 2 + j) % n + 1).collect();
+            let a: V<US> = (0..m).map(|j| ((i + j) % (2 * n)) / 2 + 1).collect();
+            array_output(&a, out);
+        });
+    });
 }
 
 fn main() {
