@@ -2,7 +2,7 @@
 // Copy + modify should needed
 
 #[allow(dead_code)]
-struct FenwickTreeSingleAdd {
+pub struct FenwickTreeSingleAdd {
     len: usize,
     bit: Vec<i32>,
 }
@@ -56,6 +56,42 @@ impl FenwickTreeSingleAdd {
             i = i | (i + 1);
         }
     }
+}
+
+// Find a smallest point i that sum (..i) >= val
+#[allow(dead_code)]
+fn lower_bound_fw_tree(fw: &FenwickTreeSingleAdd, val: i32) -> usize {
+    let mut l = 1;
+    let mut r = fw.len;
+    let mut ans = r + 1;
+    while l <= r {
+        let mid = (l + r) / 2;
+        if fw.sum(..mid) >= val {
+            ans = mid;
+            r = mid - 1;
+        } else {
+            l = mid + 1
+        }
+    }
+    ans
+}
+
+// Find a biggest point i that sum (i..) >= val
+#[allow(dead_code)]
+fn upper_bound_fw_tree(fw: &FenwickTreeSingleAdd, val: i32) -> usize {
+    let mut l = 1;
+    let mut r = fw.len;
+    let mut ans = 0;
+    while l <= r {
+        let mid = (l + r) / 2;
+        if fw.sum(mid..) >= val {
+            ans = mid;
+            l = mid + 1;
+        } else {
+            r = mid - 1;
+        }
+    }
+    ans
 }
 
 #[allow(dead_code)]

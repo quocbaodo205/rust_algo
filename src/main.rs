@@ -215,40 +215,6 @@ type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
 
-#[allow(dead_code)]
-fn compress<T>(a: &V<T>) -> (V<US>, V<T>)
-where
-    T: Ord + PartialOrd + Clone + Copy,
-{
-    let unique_val: Set<T> = a.iter().cloned().collect();
-    let unique_val_arr: V<T> = unique_val.iter().cloned().collect();
-    (
-        a.iter()
-            .map(|x| lower_bound_pos(&unique_val_arr, *x) + 1)
-            .collect(),
-        unique_val_arr,
-    )
-}
-
-#[allow(dead_code)]
-fn compress_pair<T>(a: &V<(T, T)>) -> (V<UU>, V<T>, V<T>)
-where
-    T: Ord + PartialOrd + Clone + Copy,
-{
-    let mut final_arr = vec![(0, 0); a.len()];
-    let unique_x: Set<T> = a.iter().map(|&p| p.0).collect();
-    let unique_x_v: V<T> = unique_x.iter().cloned().collect();
-    (0..a.len()).for_each(|i| {
-        final_arr[i].0 = lower_bound_pos(&unique_x_v, a[i].0) + 1;
-    });
-    let unique_y: Set<T> = a.iter().map(|&p| p.1).collect();
-    let unique_y_v: V<T> = unique_y.iter().cloned().collect();
-    (0..a.len()).for_each(|i| {
-        final_arr[i].1 = lower_bound_pos(&unique_y_v, a[i].1) + 1;
-    });
-    (final_arr, unique_x_v, unique_y_v)
-}
-
 // =========================== IO for classic problems =======================
 
 #[allow(dead_code)]

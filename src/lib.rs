@@ -13,6 +13,7 @@ fn get_log_2(x: u32) -> u32 {
 
 pub mod basic_graph;
 pub mod comb;
+pub mod coord;
 pub mod dsu;
 pub mod fenw;
 pub mod game;
