@@ -22,6 +22,7 @@ pub mod rng;
 pub mod root_tree;
 pub mod segment_tree;
 pub mod string;
+pub mod treap;
 pub mod trie;
 
 // Segment tree implementation that support single place modification

@@ -215,18 +215,41 @@ type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
 
-// =========================== IO for classic problems =======================
+#[allow(dead_code)]
+fn compress<T>(a: &V<T>) -> (V<US>, V<T>)
+where
+    T: Ord + PartialOrd + Clone + Copy,
+{
+    let unique_val: Set<T> = a.iter().cloned().collect();
+    let unique_val_arr: V<T> = unique_val.iter().cloned().collect();
+    (
+        a.iter()
+            .map(|x| lower_bound_pos(&unique_val_arr, *x) + 1)
+            .collect(),
+        unique_val_arr,
+    )
+}
 
 #[allow(dead_code)]
-fn read_n_and_array<T: FromStr + Copy>(
-    line: &mut String,
-    reader: &mut BufReader<Stdin>,
-    default: T,
-) -> (T, V<T>) {
-    let n = read_1_number(line, reader, default);
-    let v = read_vec_template(line, reader, default);
-    (n, v)
+fn compress_pair<T>(a: &V<(T, T)>) -> (V<UU>, V<T>, V<T>)
+where
+    T: Ord + PartialOrd + Clone + Copy,
+{
+    let mut final_arr = vec![(0, 0); a.len()];
+    let unique_x: Set<T> = a.iter().map(|&p| p.0).collect();
+    let unique_x_v: V<T> = unique_x.iter().cloned().collect();
+    (0..a.len()).for_each(|i| {
+        final_arr[i].0 = lower_bound_pos(&unique_x_v, a[i].0) + 1;
+    });
+    let unique_y: Set<T> = a.iter().map(|&p| p.1).collect();
+    let unique_y_v: V<T> = unique_y.iter().cloned().collect();
+    (0..a.len()).for_each(|i| {
+        final_arr[i].1 = lower_bound_pos(&unique_y_v, a[i].1) + 1;
+    });
+    (final_arr, unique_x_v, unique_y_v)
 }
+
+// =========================== IO for classic problems =======================
 
 #[allow(dead_code)]
 fn better_array_debug<T>(a: &V<T>)
@@ -251,6 +274,71 @@ where
 }
 
 #[allow(dead_code)]
+fn read_n_and_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (US, V<T>) {
+    let n = read_1_number(line, reader, 0usize);
+    let v = read_vec_template(line, reader, default);
+    (n, v)
+}
+
+#[allow(dead_code)]
+fn read_n_and_array_of_pair<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (US, V<(T, T)>) {
+    let n = read_1_number(line, reader, 0usize);
+    let mut v: V<(T, T)> = V::new();
+    v.reserve(n);
+    (0..n).for_each(|_| {
+        let x = read_2_number(line, reader, default);
+        v.push(x);
+    });
+    (n, v)
+}
+
+#[allow(dead_code)]
+fn read_n_m_and_2_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (T, T, V<T>, V<T>) {
+    let (n, m) = read_2_number(line, reader, default);
+    let a = read_vec_template(line, reader, default);
+    let b = read_vec_template(line, reader, default);
+    (n, m, a, b)
+}
+
+#[allow(dead_code)]
+fn read_graph_edge_list(
+    g: &mut VV<US>,
+    m: US,
+    is_bidirectional: bool,
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+) {
+    (0..m).for_each(|_| {
+        let (u, v) = read_2_number(line, reader, 0usize);
+        let (u, v) = (u - 1, v - 1);
+        g[u].push(v);
+        if is_bidirectional {
+            g[v].push(u);
+        }
+    });
+}
+
+#[allow(dead_code)]
+fn read_tree_parent_list(g: &mut VV<US>, n: US, line: &mut String, reader: &mut BufReader<Stdin>) {
+    // Rooted tree at 0, parent of [1..n-1]
+    let parent = read_vec_template(line, reader, 0usize);
+    // Example: 1 1 2 2 4 -> parent of 1 is 0, parent of 2 is 0, ...
+    (0..n - 2).for_each(|i| g[parent[i] - 1].push(i + 1));
+}
+
+#[allow(dead_code)]
 fn array_output<T>(a: &V<T>, out: &mut BufWriter<Stdout>)
 where
     T: Display,
@@ -261,29 +349,12 @@ where
     writeln!(out).unwrap();
 }
 
-const MOD: i64 = 998244353;
-
 // =========================== End template here =======================
 
 fn solve(re: &mut BufReader<Stdin>, li: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number(li, re, 0);
     let df = 0usize;
-    (0..t).for_each(|_te| {
-        let (n, m) = read_2_number(li, re, df);
-        if m > 2 * n - 1 {
-            writeln!(out, "NO").unwrap();
-            return;
-        }
-        writeln!(out, "YES").unwrap();
-        // 0 -> 0, 1 -> 0: same color 0, 2 -> 0, 3 -> 0 same color 1, ...
-        // => i->0, i+1->0: color = i/2
-        // Next: cycle the color list of i->0: 1 1 2 2 3 3 ... x x => 1 2 2 3 3 ... x 1
-        (0..2 * n).for_each(|i| {
-            // let a: V<US> = (0..m).map(|j| (i / 2 + j) % n + 1).collect();
-            let a: V<US> = (0..m).map(|j| ((i + j) % (2 * n)) / 2 + 1).collect();
-            array_output(&a, out);
-        });
-    });
+    (0..t).for_each(|_te| {});
 }
 
 fn main() {

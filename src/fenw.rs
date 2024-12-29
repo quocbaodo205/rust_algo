@@ -2,15 +2,15 @@
 // Copy + modify should needed
 
 #[allow(dead_code)]
-struct FenwickTree {
+struct FenwickTreeSingleAdd {
     len: usize,
     bit: Vec<i32>,
 }
 
 #[allow(dead_code)]
-impl FenwickTree {
+impl FenwickTreeSingleAdd {
     pub fn new(n: usize) -> Self {
-        FenwickTree {
+        FenwickTreeSingleAdd {
             len: n,
             bit: vec![0; n + 10],
         }
@@ -145,7 +145,7 @@ mod test {
 
     #[test]
     fn test_fw_single() {
-        let mut fw = FenwickTree::new(10);
+        let mut fw = FenwickTreeSingleAdd::new(10);
         fw.add(1, 1);
         fw.add(2, 2);
         fw.add(10, 1);
