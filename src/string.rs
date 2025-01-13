@@ -1,5 +1,32 @@
 use std::cmp::{max, min};
 
+// ========================= simple search ====================
+
+// Searching all substring by length first and sliding windows
+#[allow(dead_code)]
+fn all_sub_str_template(s: &Vec<u8>, f: &dyn Fn(usize) -> usize) {
+    // Any substring of length d
+    (1..=s.len()).for_each(|d| {
+        // Process first substr
+        let mut start = 0;
+        let mut end = start + d - 1;
+        let mut contrib = 0; // Contribution of each position
+
+        // Move up and process each substr
+        while end < s.len() - 1 {
+            // Minus old contrib
+            contrib -= f(start);
+
+            // Plus new contrib
+            start += 1;
+            end += 1;
+            contrib += f(end);
+        }
+    });
+}
+
+// ========================= complex algo =====================
+
 #[allow(dead_code)]
 fn manacher_odd(st: &str) -> Vec<usize> {
     let n = st.len();

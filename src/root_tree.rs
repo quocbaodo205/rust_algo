@@ -86,3 +86,29 @@ fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -
     });
     tsize[u]
 }
+
+#[allow(dead_code)]
+fn dfs_reroot(u: usize, p: usize, g: &Vec<Vec<usize>>, state: &mut Vec<usize>) -> usize {
+    let mut ans = 0;
+    // TODO: Calculate ans if root at u
+    g[u].iter().for_each(|&v| {
+        if v == p {
+            return;
+        }
+        let old_state_u = state[u];
+        let old_state_v = state[v];
+
+        // TODO: Making root at v
+        let mut state_u_without_v = state[u];
+        let mut state_v_with_u = 10; // TODO: What?
+
+        // Rerooting at v and process
+        state[u] = state_u_without_v;
+        state[v] = state_v_with_u;
+        ans += dfs_reroot(v, u, g, state);
+        // Return old state
+        state[u] = old_state_u;
+        state[v] = old_state_v;
+    });
+    ans
+}

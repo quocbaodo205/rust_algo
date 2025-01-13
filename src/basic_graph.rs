@@ -20,6 +20,8 @@ enum CheckState {
 
 // ============================ basic =====================================
 
+// Visual: https://visualgo.net/en/graphds
+
 // simple DFS
 #[allow(dead_code)]
 fn dfs_temp(u: US, g: &VV<US>, state: &mut V<CheckState>) {
@@ -54,6 +56,52 @@ fn bfs_temp(n: US) {
             });
         }
     });
+}
+
+// ============================ shortest path =====================================
+
+// simple BFS
+#[allow(dead_code)]
+fn bfs_shpath(n: US) {
+    let mut g: VV<US> = vec![V::new(); n];
+    let mut d = vec![1000000009; n];
+
+    // Init some d[u] = 0 and push to Q
+    let mut q: VecDeque<US> = VecDeque::new();
+    (0..n).for_each(|u| {
+        if d[u] == 0 {
+            q.push_back(u);
+        }
+    });
+
+    while let Some(u) = q.pop_front() {
+        g[u].iter().for_each(|&v| {
+            if d[v] > d[u] + 1 {
+                d[v] = d[u] + 1;
+                q.push_back(v);
+            }
+        });
+    }
+}
+
+// simple BFS
+#[allow(dead_code)]
+fn dijkstra(n: US) {
+    let mut g: VV<UU> = vec![V::new(); n];
+    let mut d = vec![1000000009; n];
+
+    // Init some d[u] = 0 and push to Q
+    let mut q: Set<UU> = (0..n).map(|u| (d[u], u)).collect();
+
+    while let Some((du, u)) = q.pop_first() {
+        g[u].iter().for_each(|&(v, w)| {
+            if d[v] > du + w {
+                q.remove(&(d[v], v));
+                d[v] = du + w;
+                q.insert((d[v], v));
+            }
+        });
+    }
 }
 
 // ============================ topo sort =====================================

@@ -1,5 +1,4 @@
 use std::{
-    borrow::BorrowMut,
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::{write, Debug, Display},
@@ -64,13 +63,23 @@ fn read_2_number<T: FromStr + Copy>(
 }
 
 #[allow(dead_code)]
-fn read_3_number_<T: FromStr + Copy>(
+fn read_3_number<T: FromStr + Copy>(
     line: &mut String,
     reader: &mut BufReader<Stdin>,
     default: T,
 ) -> (T, T, T) {
     let v = read_vec_template(line, reader, default);
     (v[0], v[1], v[2])
+}
+
+#[allow(dead_code)]
+fn read_4_number<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (T, T, T, T) {
+    let v = read_vec_template(line, reader, default);
+    (v[0], v[1], v[2], v[3])
 }
 
 #[allow(dead_code)]
@@ -197,23 +206,85 @@ where
     true
 }
 
-#[allow(dead_code)]
-fn num_digit(x: u64) -> u64 {
-    let mut c = 0;
-    let mut rx = x;
-    while rx > 0 {
-        rx /= 10;
-        c += 1;
-    }
-    return c;
-}
-
 type V<T> = Vec<T>;
 type VV<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
 type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
+
+// ========================= Math ops =================================
+
+#[allow(dead_code)]
+fn to_digit_array(a: u64) -> V<US> {
+    let mut ans: V<US> = V::new();
+    let mut a = a;
+    while a > 0 {
+        ans.push((a % 10) as usize);
+        a /= 10;
+    }
+    ans.reverse();
+    ans
+}
+
+// Calculate ceil(a/b) in int
+#[allow(dead_code)]
+fn ceil_int(a: u64, b: u64) -> u64 {
+    let mut r = a / b;
+    if a % b != 0 {
+        r += 1;
+    }
+    r
+}
+
+// Calculate sumxor 1->n
+#[allow(dead_code)]
+fn sumxor(n: u64) -> u64 {
+    let md = n % 4;
+    match md {
+        0 => n,
+        1 => 1,
+        2 => n + 1,
+        3 => 0,
+        _ => 0,
+    }
+}
+
+#[allow(dead_code)]
+fn sumxor_range(l: u64, r: u64) -> u64 {
+    if l == 0 {
+        sumxor(r)
+    } else {
+        sumxor(l - 1) ^ sumxor(r)
+    }
+}
+
+// How many time that x === k (mod m) appear in range [l -> r]? (k < m obviously)
+#[allow(dead_code)]
+fn mod_in_range(l: u64, r: u64, k: u64, m: u64) -> (u64, u64, u64) {
+    // Number form: x = k + a*m
+    // Consider [l -> l+m): appear only once
+    // First oc: l <= k + a*m < l+m
+    // l - k <= a*m < l+m - k
+    // (l - k) / m <= a < (l+m-k)/k
+    let first_oc = if l <= k {
+        k
+    } else {
+        k + (ceil_int(l - k, m)) * m
+    };
+    if first_oc > r {
+        // No occurrence in range
+        return (0, 0, 0);
+    }
+    // firstoc + a*m <= r
+    // a <= (r - firstoc) / m
+    let last_oc = first_oc + ((r - first_oc) / m) * m;
+    // firstoc: k + a*m
+    // lastoc: k + b*m
+    let oc = ((last_oc - k) - (first_oc - k)) / m + 1;
+    // println!("x === {k} (mod {m}) in range [{l},{r}], first_oc = {first_oc}, last_oc = {last_oc}, # = {oc}");
+    (oc, first_oc, last_oc)
+}
 
 // =========================== IO for classic problems =======================
 
@@ -224,7 +295,7 @@ where
 {
     a.iter()
         .enumerate()
-        .for_each(|(i, x)| println!("{i}: {x:?}"));
+        .for_each(|(i, x)| println!("{i:4}: {x:?}"));
 }
 
 // 2 array need to have the same length
@@ -235,7 +306,7 @@ where
     D: Debug,
 {
     (0..a.len()).for_each(|i| {
-        println!("{i}: {:?} -- {:?}", a[i], b[i]);
+        println!("{i:4}: {:?} -- {:4?}", a[i], b[i]);
     })
 }
 
@@ -267,6 +338,18 @@ fn read_n_and_array_of_pair<T: FromStr + Copy>(
 }
 
 #[allow(dead_code)]
+fn read_n_and_2_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (T, V<T>, V<T>) {
+    let n = read_1_number(line, reader, default);
+    let a = read_vec_template(line, reader, default);
+    let b = read_vec_template(line, reader, default);
+    (n, a, b)
+}
+
+#[allow(dead_code)]
 fn read_n_m_and_2_array<T: FromStr + Copy>(
     line: &mut String,
     reader: &mut BufReader<Stdin>,
@@ -279,7 +362,19 @@ fn read_n_m_and_2_array<T: FromStr + Copy>(
 }
 
 #[allow(dead_code)]
-fn read_graph_edge_list(
+fn read_n_m_k_and_2_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (T, T, T, V<T>, V<T>) {
+    let (n, m, k) = read_3_number(line, reader, default);
+    let a = read_vec_template(line, reader, default);
+    let b = read_vec_template(line, reader, default);
+    (n, m, k, a, b)
+}
+
+#[allow(dead_code)]
+fn read_graph_from_edge_list(
     g: &mut VV<US>,
     m: US,
     is_bidirectional: bool,
@@ -294,6 +389,23 @@ fn read_graph_edge_list(
             g[v].push(u);
         }
     });
+}
+
+// Weight first to allow sort by weight, very useful!
+#[allow(dead_code)]
+fn read_edge_list_with_weight(
+    m: US,
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+) -> V<(US, US, US)> {
+    let mut edges: V<(US, US, US)> = V::new();
+    edges.reserve(m);
+    (0..m).for_each(|_| {
+        let (u, v, w) = read_3_number(line, reader, 0usize);
+        let (u, v) = (u - 1, v - 1);
+        edges.push((w, u, v));
+    });
+    edges
 }
 
 #[allow(dead_code)]
@@ -315,12 +427,143 @@ where
     writeln!(out).unwrap();
 }
 
+// =========================== Interactive queries =======================
+
+#[allow(dead_code)]
+fn query(l: u64, r: u64, re: &mut BufReader<Stdin>, li: &mut String) -> u64 {
+    println!("? {l} {r}");
+    let ans = read_1_number(li, re, 0u64);
+    ans
+}
+
 // =========================== End template here =======================
+
+#[allow(dead_code)]
+struct DSU {
+    n: usize,
+    parent: Vec<usize>,
+    size: Vec<usize>,
+}
+
+#[allow(dead_code)]
+impl DSU {
+    pub fn new(sz: usize) -> Self {
+        DSU {
+            n: sz,
+            parent: (0..sz).collect(),
+            size: vec![0; sz],
+        }
+    }
+
+    pub fn find_parent(&mut self, u: usize) -> usize {
+        if self.parent[u] == u {
+            return u;
+        }
+        self.parent[u] = self.find_parent(self.parent[u]);
+        return self.parent[u];
+    }
+
+    pub fn union(&mut self, u: usize, v: usize) {
+        let mut pu = self.find_parent(u);
+        let mut pv = self.find_parent(v);
+        if pu == pv {
+            return;
+        }
+        if self.size[pu] > self.size[pv] {
+            swap(&mut pu, &mut pv);
+        }
+        self.size[pu] += self.size[pv];
+        self.parent[pv] = pu;
+    }
+
+    pub fn count_set(&mut self) -> usize {
+        (0..self.n).filter(|&u| self.find_parent(u) == u).count()
+    }
+}
 
 fn solve(re: &mut BufReader<Stdin>, li: &mut String, out: &mut BufWriter<Stdout>) {
     let t = read_1_number(li, re, 0);
     let df = 0usize;
-    (0..t).for_each(|_te| {});
+    (0..t).for_each(|_te| {
+        let (n, m, q) = read_3_number(li, re, df);
+        let mut edges: V<(US, US, US)> = V::new();
+        edges.reserve(m);
+        (0..m).for_each(|_| {
+            let (u, v, w) = read_3_number(li, re, df);
+            let (u, v) = (u - 1, v - 1);
+            edges.push((w, u, v));
+        });
+        edges.sort();
+
+        // Main part
+        let mut value = vec![0; m + 1];
+        // dis[k][u][v]: len of the shortest path between u->v,
+        // if weight of the smallest k edges are 0, and the rest is 1.
+        let mut dis = vec![vec![vec![1000000009; n]; n]; n];
+
+        // Add all edges with weight = 1:
+        (0..n).for_each(|u| {
+            dis[0][u][u] = 0;
+        });
+        edges.iter().for_each(|&(_, u, v)| {
+            dis[0][u][v] = 1;
+            dis[0][v][u] = 1;
+        });
+
+        // Floyd
+        (0..n).for_each(|k| {
+            (0..n).for_each(|i| {
+                (0..n).for_each(|j| {
+                    dis[0][i][j] = min(dis[0][i][j], dis[0][i][k] + dis[0][k][j]);
+                });
+            });
+        });
+
+        let mut p = 1;
+        let mut dsu = DSU::new(n);
+        edges.iter().for_each(|&(w, u, v)| {
+            // Make edge (u,v) = 0
+            if dsu.find_parent(u) != dsu.find_parent(v) {
+                dsu.union(u, v);
+                (0..n).for_each(|i| {
+                    (0..n).for_each(|j| {
+                        dis[p][i][j] = min(
+                            dis[p - 1][i][j],
+                            min(
+                                dis[p - 1][i][u] + dis[p - 1][v][j], // i -> u -> v -> j
+                                dis[p - 1][i][v] + dis[p - 1][u][j], // i -> v -> u -> j
+                            ),
+                        );
+                    });
+                });
+                value[p] = w;
+                p += 1;
+            }
+        });
+
+        // Binary search dis[mid][u][v] < k.
+        // Then path u->v with k-th maximum <= value[mid] exist.
+        (0..q).for_each(|_| {
+            let (u, v, k) = read_3_number(li, re, df);
+            let (u, v) = (u - 1, v - 1);
+
+            let mut l = 0;
+            let mut r = n - 1;
+
+            let mut ans = n - 1;
+            while l <= r {
+                let mid = (l + r) / 2;
+                if dis[mid][u][v] < k {
+                    ans = mid;
+                    r = mid - 1;
+                } else {
+                    l = mid + 1;
+                }
+            }
+            write!(out, "{} ", value[ans]).unwrap();
+        });
+        writeln!(out).unwrap();
+    });
 }
 
 fn main() {

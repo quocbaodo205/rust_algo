@@ -53,6 +53,27 @@ where
 }
 
 #[allow(dead_code)]
+fn compress_segments<T>(a: &V<(T, T)>) -> (V<(US, US)>, V<T>)
+where
+    T: Ord + PartialOrd + Clone + Copy,
+{
+    let mut unique_val: Set<T> = a.iter().map(|&p| p.0).collect();
+    unique_val.extend(a.iter().map(|&p| p.1));
+    let unique_val_arr: V<T> = unique_val.iter().cloned().collect();
+    (
+        a.iter()
+            .map(|&p| {
+                (
+                    (lower_bound_pos(&unique_val_arr, p.0) + 1),
+                    (lower_bound_pos(&unique_val_arr, p.1) + 1),
+                )
+            })
+            .collect(),
+        unique_val_arr,
+    )
+}
+
+#[allow(dead_code)]
 fn is_valid_segment<T>(p: (T, T)) -> bool
 where
     T: Ord + PartialOrd,

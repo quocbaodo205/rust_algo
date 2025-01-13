@@ -4,7 +4,7 @@
 // If no need for any of these, you can just use fw / sg they are faster.
 
 use std::{
-    cmp::max,
+    cmp::{max, min},
     ops::{Add, AddAssign},
 };
 
@@ -63,15 +63,22 @@ impl Xoshiro256PlusPlus {
 // ==================== Key-value based treap and range ops =================== //
 // https://caterpillow.github.io/byot
 
-// Lazy operation that allow range add
+// Lazy operation that allow range add or range set
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct TreapLazy {
     val: i64,
+    // Is increase, if false then it's a set operation.
+    // Remember to find all is_inc and change to false should needed.
+    is_inc: bool,
 }
 
 impl AddAssign for TreapLazy {
     fn add_assign(&mut self, rhs: Self) {
+        if !rhs.is_inc {
+            self.val = 0;
+            self.is_inc = false;
+        }
         self.val += rhs.val;
     }
 }
@@ -87,6 +94,10 @@ struct TreapValue {
 impl TreapValue {
     // Update from lazy operation
     pub fn update(&mut self, lz: TreapLazy, sz: usize) {
+        if !lz.is_inc {
+            self.sum = 0;
+            self.mx = 0;
+        }
         self.sum += lz.val * (sz as i64);
         self.mx += lz.val;
     }
@@ -103,10 +114,13 @@ impl Add for TreapValue {
     }
 }
 
-const LID: TreapLazy = TreapLazy { val: 0 };
+const LID: TreapLazy = TreapLazy {
+    val: 0,
+    is_inc: true,
+};
 const VID: TreapValue = TreapValue {
     sum: 0,
-    mx: -1000000000,
+    mx: -1000000000000000000,
 };
 
 // =================== Main structure ====================== //
@@ -357,7 +371,7 @@ impl Treap {
         // Add the lazy val to k and merge all
         self.head = Treap::merge_link(
             l,
-            Treap::merge_link(Treap::add_link(rs, TreapLazy { val }), ri),
+            Treap::merge_link(Treap::add_link(rs, TreapLazy { val, is_inc: true }), ri),
         );
     }
 
@@ -381,7 +395,7 @@ impl Treap {
 
         // Add the lazy val to k and merge all
         self.head = Treap::merge_link(
-            Treap::merge_link(ll, Treap::add_link(mid, TreapLazy { val })),
+            Treap::merge_link(ll, Treap::add_link(mid, TreapLazy { val, is_inc: true })),
             r,
         );
     }

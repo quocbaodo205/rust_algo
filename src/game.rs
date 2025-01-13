@@ -51,13 +51,3 @@ fn grundy_number(max_state: usize) -> Vec<usize> {
 
     g
 }
-
-#[allow(dead_code)]
-fn print_down<T>(v: &Vec<T>)
-where
-    T: Debug,
-{
-    v.iter().enumerate().for_each(|(i, x)| {
-        println!("{i:4} {:4?}", *x);
-    })
-}

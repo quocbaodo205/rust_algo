@@ -164,6 +164,7 @@ fn psum_divisor_func_sq(n: u64, m: u64) -> u64 {
 
 #[allow(dead_code)]
 // framework to cal psum of (f*g)(n)
+// https://codeforces.com/blog/entry/117635
 fn dirichlet_convolution(
     n: u64,
     a: f64,
