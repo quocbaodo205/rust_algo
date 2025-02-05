@@ -124,14 +124,14 @@ impl Trie {
         cur.val += 1;
     }
 
-    pub fn get(&mut self, st: &[u8]) -> i32 {
-        let mut cur = &mut self.head;
+    pub fn get(&self, st: &[u8]) -> i32 {
+        let mut cur = &self.head;
         for c in st {
             let idx = (*c - b'a') as usize;
             if cur.children[idx].is_none() {
                 return 0;
             }
-            cur = cur.children[idx].as_mut().unwrap();
+            cur = cur.children[idx].as_ref().unwrap();
         }
         cur.val
     }

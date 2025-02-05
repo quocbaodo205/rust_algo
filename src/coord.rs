@@ -92,6 +92,30 @@ where
     Some((max(a.0, b.0), min(a.1, b.1)))
 }
 
+// https://www.geeksforgeeks.org/scheduling-in-greedy-algorithms/
+// Select the next possible interval with smallest end
+// Return the min number of even to delete to make schedule works.
+#[allow(dead_code)]
+fn scheduling() -> usize {
+    let v = [];
+    let mut rl: Vec<(i32, i32)> = v.iter().map(|&(l, r)| (r, l)).collect();
+    rl.sort_unstable();
+
+    let mut end = -1000000000;
+    let mut count = 0;
+
+    rl.iter().for_each(|&(r, l)| {
+        // Segment is currently [l, r), modify should needed...
+        if l >= end {
+            end = r;
+        } else {
+            count += 1;
+        }
+    });
+
+    count
+}
+
 #[allow(dead_code)]
 fn pointsweep() {
     let n = 10;

@@ -150,13 +150,13 @@ fn find_topo(g: &VV<US>, state: &mut V<CheckState>) -> V<US> {
 
 // Template for grid movement
 #[derive(Copy, Clone, Debug)]
-struct Point((i32, i32));
+struct Point(i32, i32);
 
 impl ops::Add for Point {
     type Output = Point;
 
     fn add(self, rhs: Point) -> Self::Output {
-        Point((self.0 .0 + rhs.0 .0, self.0 .1 + rhs.0 .1))
+        Point(self.0 + rhs.0, self.1 + rhs.1)
     }
 }
 
@@ -164,24 +164,24 @@ impl ops::Sub for Point {
     type Output = Point;
 
     fn sub(self, rhs: Point) -> Self::Output {
-        Point((self.0 .0 - rhs.0 .0, self.0 .1 - rhs.0 .1))
+        Point(self.0 - rhs.0, self.1 - rhs.1)
     }
 }
 
 #[allow(dead_code)]
 fn is_valid_point(x: Point, n: usize, m: usize) -> bool {
-    return x.0 .0 >= 0 && x.0 .0 < n as i32 && x.0 .1 >= 0 && x.0 .1 < m as i32;
+    return x.0 >= 0 && x.0 < n as i32 && x.1 >= 0 && x.1 < m as i32;
 }
 
 #[allow(dead_code)]
 // Translate a character to a directional Point
 fn translate(c: u8) -> Point {
     match c as char {
-        'U' => Point((-1, 0)),
-        'D' => Point((1, 0)),
-        'L' => Point((0, -1)),
-        'R' => Point((0, 1)),
-        _ => Point((0, 0)),
+        'U' => Point(-1, 0),
+        'D' => Point(1, 0),
+        'L' => Point(0, -1),
+        'R' => Point(0, 1),
+        _ => Point(0, 0),
     }
 }
 
@@ -191,14 +191,14 @@ fn dfs_grid(s: Point, mp: &V<V<u8>>, checked: &mut V<V<bool>>) {
     let n = mp.len();
     let m = mp[0].len();
 
-    if checked[s.0 .0 as usize][s.0 .1 as usize] {
+    if checked[s.0 as usize][s.1 as usize] {
         return;
     }
     let mut s = Some(s);
     while let Some(u) = s {
-        checked[u.0 .0 as usize][u.0 .1 as usize] = true;
-        let v = u + translate(mp[u.0 .0 as usize][u.0 .1 as usize]);
-        s = match is_valid_point(v, n, m) && !checked[v.0 .0 as usize][v.0 .1 as usize] {
+        checked[u.0 as usize][u.1 as usize] = true;
+        let v = u + translate(mp[u.0 as usize][u.1 as usize]);
+        s = match is_valid_point(v, n, m) && !checked[v.0 as usize][v.1 as usize] {
             true => Some(v),
             false => None,
         }
@@ -211,20 +211,20 @@ fn flood_grid(s: Point, blocked: &V<V<bool>>, checked: &mut V<V<bool>>) {
     let n = blocked.len();
     let m = blocked[0].len();
 
-    if checked[s.0 .0 as usize][s.0 .1 as usize] {
+    if checked[s.0 as usize][s.1 as usize] {
         return;
     }
     let mut q: VecDeque<Point> = VecDeque::new();
-    let direction = "LRUD".as_bytes();
+    let direction = [Point(0, 1), Point(0, -1), Point(1, 0), Point(-1, 0)];
     q.push_back(s);
     while let Some(u) = q.pop_front() {
         direction.iter().for_each(|&d| {
-            let v = u + translate(d);
+            let v = u + d;
             if is_valid_point(v, n, m)
-                && !checked[v.0 .0 as usize][v.0 .1 as usize]
-                && !blocked[v.0 .0 as usize][v.0 .1 as usize]
+                && !checked[v.0 as usize][v.1 as usize]
+                && !blocked[v.0 as usize][v.1 as usize]
             {
-                checked[v.0 .0 as usize][v.0 .1 as usize] = true;
+                checked[v.0 as usize][v.1 as usize] = true;
                 q.push_back(v);
             }
         });

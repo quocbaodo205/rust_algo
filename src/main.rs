@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::{write, Debug, Display},
@@ -170,10 +171,63 @@ fn bin_search_template(l: usize, r: usize, f: &dyn Fn(usize) -> bool) -> usize {
             ans = mid;
             l = mid + 1;
         } else {
+            if mid == 0 {
+                break;
+            }
             r = mid - 1;
         }
     }
     return ans;
+}
+
+// Template for 2 pointer: function f will act on a range [l,r]:
+// - If satisfy then advance r
+// - Else advance l until satisfy
+#[allow(dead_code)]
+fn two_pointer_template(a: &[i32], f: &dyn Fn(usize, usize) -> bool) {
+    // Range representation: [l,r)
+    let mut l = 0;
+    let mut r = 0;
+
+    while l < a.len() {
+        while r < a.len() && f(l, r) {
+            // TODO: Process + r
+            r += 1;
+        }
+        // Full range satisfy
+        if r == a.len() {
+            break;
+        }
+
+        while !f(l, r) {
+            // TODO: Process - l
+            l += 1;
+        }
+    }
+}
+
+// Template for sliding window of size d
+#[allow(dead_code)]
+fn sliding_windows_d(s: &[u8], d: usize, f: &dyn Fn(usize) -> usize) {
+    // Process first substr
+    let mut start = 0;
+    let mut end = start + d - 1;
+    let mut contrib = 0; // Contribution of each position
+                         // TODO: Calculate first contrib of [start..=end]
+    (start..=end).for_each(|i| {
+        contrib += 1;
+    });
+
+    // Move up and process each substr
+    while end + 1 < s.len() {
+        // Minus old contrib
+        contrib -= f(start);
+
+        // Plus new contrib
+        start += 1;
+        end += 1;
+        contrib += f(end);
+    }
 }
 
 pub fn next_permutation<T>(arr: &mut [T]) -> bool
@@ -438,6 +492,231 @@ fn query(l: u64, r: u64, re: &mut BufReader<Stdin>, li: &mut String) -> u64 {
 
 // =========================== End template here =======================
 
+// Definition for singly-linked list.
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct ListNode {
+    pub val: i32,
+    pub next: Option<Box<ListNode>>,
+}
+
+impl ListNode {
+    #[inline]
+    fn new(val: i32) -> Self {
+        ListNode { next: None, val }
+    }
+}
+
+impl Ord for Box<ListNode> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.val.cmp(&other.val)
+    }
+}
+
+impl PartialOrd for Box<ListNode> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.val.partial_cmp(&other.val)
+    }
+}
+
+pub fn reverse_list(head: Option<Box<ListNode>>) -> Option<Box<ListNode>> {
+    if head.is_none() {
+        return None;
+    }
+
+    let mut prev: Option<Box<ListNode>> = None;
+    let mut cur: Option<Box<ListNode>> = head;
+
+    while cur.is_some() {
+        let cnode = cur.as_mut().unwrap();
+        let nx = cnode.next.take(); // [1 [2]  3 -> 4 -> 5]
+        cnode.next = prev; // [1 <- [2] 3 -> 4 -> 5 ]
+        prev = cur;
+        cur = nx; // [1 <- 2 [3] -> 4 -> 5 ]
+    }
+
+    prev
+}
+
+pub fn split_middle(head: Option<Box<ListNode>>) -> (Option<Box<ListNode>>, Option<Box<ListNode>>) {
+    let mut head = head;
+    let mut n = 0;
+
+    let mut cur = head.as_ref();
+    while let Some(f_node) = cur {
+        cur = f_node.next.as_ref();
+        n += 1;
+    }
+
+    // Newly define, drop the old one
+    let mut cur = head.as_mut();
+    n /= 2;
+    while n > 0 {
+        if let Some(f_node) = cur {
+            cur = f_node.next.as_mut();
+            n -= 1;
+        }
+    }
+    let k = cur.unwrap().next.take();
+    (head, k)
+}
+
+pub fn odd_even_list(head: Option<Box<ListNode>>) -> Option<Box<ListNode>> {
+    if head.is_none() {
+        return None;
+    }
+    // [1 -> 2 -> 3 -> 4 -> 5] || [1]
+    let mut old_head: Option<Box<ListNode>> = head;
+
+    let mut odd_ref_u = old_head.as_mut().unwrap();
+    // [(1)] [2 -> 3 -> 4 -> 5] || [1] [None]
+    let mut even = odd_ref_u.next.take();
+    if even.is_none() {
+        return old_head;
+    }
+
+    // [(1)] [(2) -> 3 -> 4 -> 5]
+    let mut even_ref = even.as_mut();
+
+    while let Some(even_ref_u) = even_ref {
+        // [(1)] [(2)] [3 -> 4 -> 5] || [1] [2] [None]
+        let next_odd = even_ref_u.next.take();
+        if next_odd.is_some() {
+            // [(1) -> 3 -> 4 -> 5] [2]
+            odd_ref_u.next = next_odd;
+            // [1 -> (3) -> 4 -> 5] [2]
+            odd_ref_u = odd_ref_u.next.as_mut().unwrap();
+
+            // [1 -> (3)] [2] [4 -> 5]
+            let next_even = odd_ref_u.next.take();
+
+            // [1 -> (3)] [2 -> 4 -> 5]
+            even_ref_u.next = next_even;
+            even_ref = even_ref_u.next.as_mut();
+        } else {
+            even_ref = None
+        }
+    }
+
+    // [1 -> 3 -> (5)] [2 -> (4)]
+    odd_ref_u.next = even;
+    old_head
+}
+
+pub fn merge_k_lists(lists: Vec<Option<Box<ListNode>>>) -> Option<Box<ListNode>> {
+    // First head and go from there
+    let mut head: Option<Box<ListNode>> = Some(Box::new(ListNode::new(0)));
+
+    let mut cur: &mut Box<ListNode> = head.as_mut().unwrap();
+    // Maintain a set of all list node by val
+
+    let mut ord = 0;
+    let mut st: BTreeSet<(Box<ListNode>, usize)> = BTreeSet::new();
+
+    // Consume the lists and move each one into the set
+    lists.into_iter().for_each(|link| {
+        if let Some(node) = link {
+            st.insert((node, ord));
+            ord += 1;
+        }
+    });
+
+    while let Some((node, _)) = st.pop_first() {
+        // Create a new node with the same val.
+        cur.next = Some(Box::new(ListNode::new(node.val)));
+        cur = cur.next.as_mut().unwrap();
+
+        if let Some(nx) = node.next {
+            st.insert((nx, ord));
+            ord += 1;
+        }
+    }
+
+    head.as_mut().unwrap().next.take()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct TreeNode {
+    pub val: i32,
+    pub left: Option<Rc<RefCell<TreeNode>>>,
+    pub right: Option<Rc<RefCell<TreeNode>>>,
+}
+
+impl TreeNode {
+    #[inline]
+    pub fn new(val: i32) -> Self {
+        TreeNode {
+            val,
+            left: None,
+            right: None,
+        }
+    }
+}
+use std::cell::RefCell;
+use std::rc::Rc;
+
+pub fn lowest_common_ancestor(
+    root: Option<Rc<RefCell<TreeNode>>>,
+    p: Option<Rc<RefCell<TreeNode>>>,
+    q: Option<Rc<RefCell<TreeNode>>>,
+) -> Option<Rc<RefCell<TreeNode>>> {
+    // If p and q is on different side => root is LCA.
+    // LCA can return: p, q, other, None
+    // p or q: Other side has to have the other node, LCA is root.
+    // other: It's the found LCA from searching the children.
+    // None: This path doesn't have p or q, ignore.
+
+    // P and Q is guarantee to be in the tree.
+
+    if let Some(node) = root {
+        let nd = RefCell::borrow(node.as_ref());
+        if nd.val == RefCell::borrow(p.as_ref().unwrap()).val {
+            return p;
+        } else if nd.val == RefCell::borrow(q.as_ref().unwrap()).val {
+            return q;
+        }
+
+        // For Rc<>, you can just clone it and put it into next loop, no need to take and put back.
+        let qleft = lowest_common_ancestor(nd.left.clone(), p.clone(), q.clone());
+        let qright = lowest_common_ancestor(nd.right.clone(), p.clone(), q.clone());
+
+        if qleft.is_some() && qright.is_some() {
+            return Some(node.clone());
+        } else if qleft.is_some() {
+            return qleft;
+        } else {
+            return qright;
+        }
+    }
+    None
+}
+
+fn count(root: Option<Rc<RefCell<TreeNode>>>, direction: i8, cur_length: i32, ans: &mut i32) {
+    *ans = max(*ans, cur_length);
+    if let Some(node) = root {
+        let node_br = RefCell::borrow(node.as_ref());
+        if direction == 0 {
+            // Any direction is good
+            count(node_br.left.clone(), -1, cur_length + 1, ans);
+            count(node_br.right.clone(), 1, cur_length + 1, ans);
+        } else {
+            // Either flip the prev direction, or break away to new start.
+            if direction == -1 {
+                count(node_br.right.clone(), 1, cur_length + 1, ans);
+            } else {
+                count(node_br.left.clone(), -1, cur_length + 1, ans);
+            }
+            count(node_br.left.clone(), 0, 0, ans);
+            count(node_br.right.clone(), 0, 0, ans);
+        }
+    }
+}
+
+pub fn longest_zig_zag(root: Option<Rc<RefCell<TreeNode>>>) -> i32 {
+    let mut ans = 0;
+    count(root, 0, 0, &mut ans);
+    ans - 1
+}
+
 #[allow(dead_code)]
 struct DSU {
     n: usize,
@@ -563,6 +842,21 @@ fn solve(re: &mut BufReader<Stdin>, li: &mut String, out: &mut BufWriter<Stdout>
             write!(out, "{} ", value[ans]).unwrap();
         });
         writeln!(out).unwrap();
+    });
+}
+
+fn st(n: usize) {
+    let mmax = 2 * n - 1;
+    let mut c = 1;
+    (0..n).for_each(|i| {
+        // Write c *, calculate the number of whitespace left
+        let ws = mmax - c;
+        // distribute to 2 side
+        print!("{}", String::from_utf8(vec![b' '; ws / 2]).unwrap());
+        print!("{}", String::from_utf8(vec![b'*'; c]).unwrap());
+        print!("{}", String::from_utf8(vec![b' '; ws / 2]).unwrap());
+        c += 2;
+        println!();
     });
 }
 
