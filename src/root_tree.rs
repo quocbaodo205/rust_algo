@@ -87,6 +87,77 @@ fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -
     tsize[u]
 }
 
+// ======================== Technical analysis ==============================
+
+// Calculating Sum(u < v | min(level[u], level[v]))
+#[allow(dead_code)]
+fn sum_min(level: &mut Vec<usize>, tsize: &mut Vec<usize>, n: usize) {
+    // Count how many node with level = l, put into an array for suffix sum
+    let maxl = *level.iter().max().unwrap();
+    let mut count_level = vec![0; maxl + 1];
+    level.iter().for_each(|&l| count_level[l] += 1);
+    let mut suffix_sum_l: Vec<u64> = count_level
+        .iter()
+        .rev()
+        .scan(0, |ssum, &c| {
+            *ssum += c;
+            Some(*ssum)
+        })
+        .collect();
+    suffix_sum_l.reverse();
+
+    let mut ans = 0u64;
+    // 2*min(lu, lv): lv >= lu and v is not decendant of u
+    (0..n).for_each(|u| {
+        ans += 2 * level[u] as u64 * (suffix_sum_l[level[u]] - tsize[u] as u64);
+    });
+
+    // Minus out lu == lv being counted twice
+    (1..=maxl).for_each(|k| {
+        ans -= 2 * k as u64 * ((count_level[k] * (count_level[k] - 1)) / 2);
+    });
+}
+
+// Count for each vertex w, number of pair (u,v) so that w is the lca of u and v.
+#[allow(dead_code)]
+fn pair_lca(tsize: &mut Vec<usize>, n: usize, children: &mut Vec<Vec<usize>>) {
+    // count_pair(w) = Sum( u = child[w] | tsize[u] * (tsize[w] - 1 - tsize[u]) );
+    let count_pair: Vec<u64> = (0..n)
+        .map(|w| {
+            children[w]
+                .iter()
+                .map(|&u| tsize[u] as u64 * (tsize[w] as u64 - 1 - tsize[u] as u64))
+                .sum::<u64>()
+        })
+        .collect();
+}
+
+// Calculating Sum(u < v | level[lca(u,v)])
+#[allow(dead_code)]
+fn sum_lca(
+    level: &mut Vec<usize>,
+    tsize: &mut Vec<usize>,
+    n: usize,
+    children: &mut Vec<Vec<usize>>,
+) {
+    // count_pair(w) = Sum( u = child[w] | tsize[u] * (tsize[w] - 1 - tsize[u]) );
+    let count_pair: Vec<u64> = (0..n)
+        .map(|w| {
+            children[w]
+                .iter()
+                .map(|&u| tsize[u] as u64 * (tsize[w] as u64 - 1 - tsize[u] as u64))
+                .sum::<u64>()
+        })
+        .collect();
+    // (2*l[w] + 1) * (#pair with w as lca)
+    let mut snd = 0;
+    (0..n).for_each(|w| {
+        snd += (2 * level[w] as u64 + 1) * count_pair[w];
+    });
+    // snd / 2 due to over count (u,v) and (v,u)
+    snd /= 2;
+}
+
 #[allow(dead_code)]
 fn dfs_reroot(u: usize, p: usize, g: &Vec<Vec<usize>>, state: &mut Vec<usize>) -> usize {
     let mut ans = 0;

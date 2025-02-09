@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 #[allow(dead_code)]
 // List primes <= n
 fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
@@ -193,6 +195,44 @@ fn dirichlet_convolution(
     // Overlap part
     res -= F(k) * G(l);
     res
+}
+
+#[allow(dead_code)]
+// Given f(x) and f^-1(x) (denote as g), find f^a(x) = y
+// f(x) generate a cyclic group of order n
+// For example: f(x) = x*k % n -> f^a(x) = k^a % n.
+fn baby_step_giant_step(
+    f: &dyn Fn(u64) -> u64,
+    g: &dyn Fn(u64) -> u64,
+    n: usize,
+    f0: u64,
+    x: u64,
+    y: u64,
+) -> Option<usize> {
+    let m = (n as f64).sqrt().ceil() as usize;
+
+    // Calculate table for f0 -> f^(m-1)
+    let mut mp: HashMap<u64, usize> = HashMap::new();
+    let mut c = f0;
+    for i in 0..m {
+        mp.insert(c, i);
+        c = f(c);
+    }
+
+    // Calculate f^-m (via g)
+    let mut gm = f0;
+    for _ in 0..m {
+        gm = g(gm);
+    }
+
+    let mut y = y;
+    for i in 0..m {
+        if let Some(&j) = mp.get(&y) {
+            return Some(i * m + j);
+        }
+        y *= gm;
+    }
+    None
 }
 
 #[cfg(test)]
