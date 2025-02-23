@@ -87,7 +87,7 @@ fn manacher_odd(st: &str) -> Vec<usize> {
 }
 
 #[allow(dead_code)]
-fn manacher(st: &str) -> Vec<usize> {
+fn manacher(st: &str) -> (String, Vec<usize>) {
     let mut t = "".to_owned();
     st.chars().for_each(|c| {
         t.push('#');
@@ -95,7 +95,9 @@ fn manacher(st: &str) -> Vec<usize> {
     });
     t.push('#');
     let p = manacher_odd(&t);
-    p[1..p.len() - 1].to_vec()
+    // at i: t[i - (p[i]-1) ..= i + (p[i]-1)] is the longest palindrome
+    // you can use the returned t and remove some characters from it.
+    (t, p)
 }
 
 #[allow(dead_code)]

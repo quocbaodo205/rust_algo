@@ -1052,3 +1052,79 @@ impl_folding! {
     impl<I: Id     > Sum<_>     for DynamicModInt<I> { fn sum(_)     -> _ { _(Self::raw(0), Add::add) } }
     impl<I: Id     > Product<_> for DynamicModInt<I> { fn product(_) -> _ { _(Self::raw(1), Mul::mul) } }
 }
+
+// ======================= Combinatoric functions using ModInt99 ======================
+
+pub struct Combinatoric998244353 {
+    fac: Vec<ModInt998244353>,
+}
+
+impl Combinatoric998244353 {
+    pub fn pow(a: ModInt998244353, b: u64) -> ModInt998244353 {
+        let mut res = ModInt998244353::new(1);
+        let mut x = a;
+        let mut cur = b;
+        while cur > 0 {
+            if cur % 2 == 1 {
+                res = res * x;
+            }
+            x = x * x;
+            cur /= 2;
+        }
+        res
+    }
+
+    pub fn new(n: usize) -> Self {
+        let f: Vec<ModInt998244353> = (0..=n)
+            .scan(ModInt998244353::new(1), |tf, i| {
+                *tf *= if i == 0 { 1 } else { i };
+                Some(*tf)
+            })
+            .collect();
+        Combinatoric998244353 { fac: f }
+    }
+
+    pub fn binom(&self, n: usize, k: usize) -> ModInt998244353 {
+        match n < k {
+            true => ModInt998244353::new(0),
+            false => self.fac[n] / (self.fac[k] * self.fac[n - k]),
+        }
+    }
+}
+
+pub struct Combinatoric100000007 {
+    fac: Vec<ModInt1000000007>,
+}
+
+impl Combinatoric100000007 {
+    pub fn pow(a: ModInt1000000007, b: u64) -> ModInt1000000007 {
+        let mut res = ModInt1000000007::new(1);
+        let mut x = a;
+        let mut cur = b;
+        while cur > 0 {
+            if cur % 2 == 1 {
+                res = res * x;
+            }
+            x = x * x;
+            cur /= 2;
+        }
+        res
+    }
+
+    pub fn new(n: usize) -> Self {
+        let f: Vec<ModInt1000000007> = (0..=n)
+            .scan(ModInt1000000007::new(1), |tf, i| {
+                *tf *= if i == 0 { 1 } else { i };
+                Some(*tf)
+            })
+            .collect();
+        Combinatoric100000007 { fac: f }
+    }
+
+    pub fn binom(&self, n: usize, k: usize) -> ModInt1000000007 {
+        match n < k {
+            true => ModInt1000000007::new(0),
+            false => self.fac[n] / (self.fac[k] * self.fac[n - k]),
+        }
+    }
+}

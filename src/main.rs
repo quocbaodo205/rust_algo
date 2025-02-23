@@ -2,7 +2,7 @@ use std::{
     borrow::{Borrow, BorrowMut},
     cell::RefCell,
     cmp::{max, min, Ordering},
-    collections::{BTreeMap, BTreeSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     fmt::{write, Debug, Display},
     io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     mem::{self, swap},
@@ -10,6 +10,14 @@ use std::{
     rc::Rc,
     str::FromStr,
 };
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CheckState {
+    NOTCHECK,
+    CHECKING,
+    CHECKED,
+}
 
 #[allow(dead_code)]
 fn read_line_str_as_vec_template(line: &mut String, reader: &mut BufReader<Stdin>) -> Vec<u8> {
@@ -301,6 +309,7 @@ type Set<T> = BTreeSet<T>;
 type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
+type UUU = (US, US, US);
 
 // ========================= Math ops =================================
 
@@ -480,6 +489,24 @@ fn read_graph_from_edge_list(
     });
 }
 
+#[allow(dead_code)]
+fn read_graph_from_edge_list_keep(
+    g: &mut VV<UU>,
+    m: US,
+    is_bidirectional: bool,
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+) {
+    (0..m).for_each(|idx| {
+        let (u, v) = read_2_number(line, reader, 0usize);
+        let (u, v) = (u - 1, v - 1);
+        g[u].push((v, idx));
+        if is_bidirectional {
+            g[v].push((u, idx));
+        }
+    });
+}
+
 // Weight first to allow sort by weight, very useful!
 #[allow(dead_code)]
 fn read_edge_list_with_weight(
@@ -516,6 +543,26 @@ where
     writeln!(out).unwrap();
 }
 
+#[allow(dead_code)]
+fn array_output_with_size<T>(a: &V<T>, out: &mut BufWriter<Stdout>)
+where
+    T: Display,
+{
+    write!(out, "{} ", a.len()).unwrap();
+    a.iter().for_each(|x| {
+        write!(out, "{x} ").unwrap();
+    });
+    writeln!(out).unwrap();
+}
+
+#[allow(dead_code)]
+fn write_vertex_list_add1(a: &V<US>, out: &mut BufWriter<Stdout>) {
+    a.iter().for_each(|x| {
+        write!(out, "{} ", x + 1).unwrap();
+    });
+    writeln!(out).unwrap();
+}
+
 // =========================== Interactive queries =======================
 
 #[allow(dead_code)]
@@ -527,97 +574,277 @@ fn query(l: u64, r: u64, re: &mut BufReader<Stdin>, li: &mut String) -> u64 {
 
 // =========================== End template here =======================
 
-fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
-    let t = read_1_number(line, reader, 0);
-    let default = 0usize;
-    (0..t).for_each(|_te| {
-        let (n, m) = read_2_number(line, reader, default);
-        let mut a = read_vec_template(line, reader, 0i32);
-        let mut b = read_vec_template(line, reader, 0i32);
-        a.sort();
-        b.sort();
-        // println!("Case {_te}, a = {a:?}, b = {b:?}");
+// Check if u is parent of v
+#[allow(dead_code)]
+pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
+    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
+}
 
-        // Pick x point from a, max score = sum(i = 0..x|a[n-i-1] - a[i])
-        // x inc: max score inc
-        // Same for b
-        // says there's maximum k operations: spend x on a, and k - x on b:
-        // score = Ga(x) + Gb(k-x)
-        // while x increase, k-x decrease
-        // Will meet at some optimal x', then decrease at 2 side
-        // -> Parabola -> Tenary search
-        let mut f: V<u64> = vec![0; n / 2 + 1];
-        for i in 0..n / 2 {
-            f[i + 1] = (a[n - i - 1] - a[i]) as u64;
+// Find the list of span edge, these edges form a spanning tree.
+// All other edges are called back edges, the back edge always point from u to it's sub tree.
+#[allow(dead_code)]
+fn dfs_tree(
+    u: US,
+    p: US,
+    g: &VV<UU>,
+    state: &mut V<CheckState>,
+    span_edges: &mut V<UUU>,
+    back_edges: &mut V<UUU>,
+) {
+    state[u] = CheckState::CHECKED;
+    for &(v, idx) in g[u].iter() {
+        if v == p {
+            continue;
         }
-        let fa: V<u64> = f
-            .iter()
-            .scan(0, |ssum, &x| {
-                *ssum += x;
-                Some(*ssum)
-            })
-            .collect();
-        let mut f: V<u64> = vec![0; m / 2 + 1];
-        for i in 0..m / 2 {
-            f[i + 1] = (b[m - i - 1] - b[i]) as u64;
+        if state[v] != CheckState::CHECKED {
+            span_edges.push((u, v, idx));
+            dfs_tree(v, u, g, state, span_edges, back_edges);
+        } else {
+            back_edges.push((u, v, idx));
         }
-        let fb: V<u64> = f
-            .iter()
-            .scan(0, |ssum, &x| {
-                *ssum += x;
-                Some(*ssum)
-            })
-            .collect();
+    }
+}
 
-        // println!("fa = {fa:?}, fb = {fb:?}");
+// Turn into a farmiliar rooted tree structure
+#[allow(dead_code)]
+pub fn dfs_root(
+    u: usize,
+    p: usize,
+    l: usize,
+    g: &Vec<Vec<UU>>,
+    parent: &mut Vec<UU>,
+    children: &mut Vec<Vec<usize>>,
+    level: &mut Vec<usize>,
+    time_in: &mut Vec<usize>,
+    time_out: &mut Vec<usize>,
+    global_time: &mut usize,
+) {
+    level[u] = l;
+    time_in[u] = *global_time;
+    time_out[u] = *global_time;
+    *global_time += 1;
 
-        let mut k = 0;
-        let mut ans: V<u64> = V::new();
-        loop {
-            k += 1;
-            if k > n {
-                break;
-            }
-            let mut l = if 2 * k >= m { 2 * k - m } else { 0 };
-            let mut r = min(k, n - k);
-            if l > r {
-                break;
-            }
-
-            // println!("Checking k = {k}, l = {l}, r = {r}");
-
-            while l <= r {
-                if r - l < 3 {
-                    // Can no longer get mid1 and mid2
-                    // Check all ans in [l..r]
-                    let mut x = fa[r] + fb[k - r];
-                    for i in l..r {
-                        if fa[i] + fb[k - i] > x {
-                            x = fa[i] + fb[k - i];
-                        }
-                    }
-                    ans.push(x);
-                    break;
-                }
-                let mid1 = l + (r - l) / 3;
-                let mid2 = r - (r - l) / 3;
-
-                let f1 = fa[mid1] + fb[k - mid1];
-                let f2 = fa[mid2] + fb[k - mid2];
-
-                if f1 < f2 {
-                    l = mid1;
-                } else {
-                    r = mid2;
-                }
-            }
-        }
-        writeln!(out, "{}", ans.len()).unwrap();
-        if ans.len() == 0 {
+    g[u].iter().for_each(|&(v, idx)| {
+        if v == p {
             return;
         }
-        array_output(&ans, out);
+        dfs_root(
+            v,
+            u,
+            l + 1,
+            g,
+            parent,
+            children,
+            level,
+            time_in,
+            time_out,
+            global_time,
+        );
+        parent[v] = (u, idx);
+        children[u].push(v);
+        time_out[u] = time_out[v];
     });
+}
+
+// Get path from u -> v via backward tracking.
+// u must be parent of v, else will be bogus
+#[allow(dead_code)]
+pub fn get_path_parent(u: US, v: US, parent: &Vec<usize>) -> V<US> {
+    let mut cur = v;
+    let mut ans: V<US> = V::new();
+    ans.push(v);
+    if u == v {
+        return ans;
+    }
+    while parent[cur] != u {
+        let p = parent[cur];
+        cur = p;
+        ans.push(cur);
+    }
+    ans.push(u);
+    ans.reverse();
+    ans
+}
+
+#[allow(dead_code)]
+struct DSU {
+    n: usize,
+    parent: Vec<usize>,
+    size: Vec<usize>,
+}
+
+#[allow(dead_code)]
+impl DSU {
+    pub fn new(sz: usize) -> Self {
+        DSU {
+            n: sz,
+            parent: (0..sz).collect(),
+            size: vec![1; sz],
+        }
+    }
+
+    pub fn find_parent(&mut self, u: usize) -> usize {
+        if self.parent[u] == u {
+            return u;
+        }
+        self.parent[u] = self.find_parent(self.parent[u]);
+        return self.parent[u];
+    }
+
+    pub fn union(&mut self, u: usize, v: usize) {
+        let mut pu = self.find_parent(u);
+        let mut pv = self.find_parent(v);
+        if pu == pv {
+            return;
+        }
+        if self.size[pu] > self.size[pv] {
+            swap(&mut pu, &mut pv);
+        }
+        self.size[pu] += self.size[pv];
+        self.parent[pv] = pu;
+    }
+
+    pub fn count_set(&mut self) -> usize {
+        (0..self.n).filter(|&u| self.find_parent(u) == u).count()
+    }
+}
+
+fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
+    let default = 0usize;
+    // let t = read_1_number(line, reader, 0);
+    // (0..t).for_each(|_te| {
+    let (n, m) = read_2_number(line, reader, default);
+    let mut g: VV<UU> = vec![V::new(); n];
+    read_graph_from_edge_list_keep(&mut g, m, true, line, reader);
+    // A DSU of edges: and edges with idx has DSU[idx] = x, meaning it has x cycle containing it.
+    let mut dsu = DSU::new(m + 1);
+    let mut index = vec![0; n];
+    let mut ans: V<US> = V::new();
+    let mut state = vec![CheckState::NOTCHECK; n];
+    // Graph could be un-connected.
+    for st in 0..n {
+        if state[st] == CheckState::CHECKED {
+            continue;
+        }
+        let mut span_edges: V<UUU> = V::new();
+        let mut back_edges: V<UUU> = V::new();
+        dfs_tree(st, st, &g, &mut state, &mut span_edges, &mut back_edges);
+        // Turn it into a tree structure with parent and shit (very often use!!)
+        // Get a list of explored vertex and compress them.
+        let mut unique_val: Set<US> = Set::new();
+        for &(u, v, _) in span_edges.iter() {
+            unique_val.insert(u);
+            unique_val.insert(v);
+        }
+        for &(u, v, _) in back_edges.iter() {
+            unique_val.insert(u);
+            unique_val.insert(v);
+        }
+        let unique_val_arr: V<US> = unique_val.iter().cloned().collect();
+        let nn = unique_val_arr.len();
+        if nn == 0 {
+            // No value, no edge, nothing to do!
+            continue;
+        }
+        let span_edges: V<UUU> = span_edges
+            .iter()
+            .map(|&(u, v, idx)| {
+                (
+                    lower_bound_pos(&unique_val_arr, u),
+                    lower_bound_pos(&unique_val_arr, v),
+                    idx,
+                )
+            })
+            .collect();
+        let back_edges: V<UUU> = back_edges
+            .iter()
+            .map(|&(u, v, idx)| {
+                (
+                    lower_bound_pos(&unique_val_arr, u),
+                    lower_bound_pos(&unique_val_arr, v),
+                    idx,
+                )
+            })
+            .collect();
+
+        let st = lower_bound_pos(&unique_val_arr, st);
+        let mut gp: VV<UU> = vec![V::new(); nn];
+        for &(u, v, idx) in span_edges.iter() {
+            gp[u].push((v, idx));
+            gp[v].push((u, idx));
+        }
+        let mut parent = vec![(0, 0); nn];
+        let mut children: VV<US> = vec![Vec::new(); nn];
+        let mut level = vec![0; nn];
+        let mut time_in = vec![0; nn];
+        let mut time_out = vec![0; nn];
+        let mut global_time = 1;
+        dfs_root(
+            st,
+            st,
+            0,
+            &gp,
+            &mut parent,
+            &mut children,
+            &mut level,
+            &mut time_in,
+            &mut time_out,
+            &mut global_time,
+        );
+        // Fix the back edge list, since they also contain duplicates.
+        let mut back_edges: V<UUU> = back_edges
+            .iter()
+            .cloned()
+            .filter(|&(u, v, _)| level[u] < level[v])
+            .collect();
+        // println!("span edges: {span_edges:?}");
+        back_edges.sort_by_key(|(u, _, _)| level[*u]);
+        // println!("back edges: {back_edges:?}");
+        for &(u, v, idx) in back_edges.iter() {
+            // For each back-edge (x,y), goes from y upward, each generate and edge (x',y').
+            // obviously (x',y') can't be a bridge. Mark it as unable.
+            let mut cur = v;
+            index[unique_val_arr[v]] = idx + 1;
+            while parent[cur].0 != u {
+                let p = parent[cur].0;
+                if index[unique_val_arr[p]] != 0 {
+                    // This chain is already explored before, no need to go further!
+                    dsu.union(idx + 1, index[unique_val_arr[p]]);
+                    break;
+                }
+                index[unique_val_arr[p]] = idx + 1;
+                cur = p;
+            }
+            // last edge: cur -> p (before break or can be u)
+            if parent[cur].0 != cur {
+                // Either index is fine
+                index[unique_val_arr[parent[cur].0]] = idx + 1;
+            }
+        }
+        for &(u, v, idx) in back_edges.iter() {
+            let group_p = dsu.find_parent(idx + 1);
+            if dsu.size[group_p] == 1 {
+                // Only 1 cycle passed through
+                let mut cur = v;
+                while parent[cur].0 != u {
+                    let (p, edge_idx) = parent[cur];
+                    ans.push(edge_idx + 1);
+                    cur = p;
+                }
+                // last edge: cur -> p (before break or can be u)
+                if parent[cur].0 != cur {
+                    let (p, edge_idx) = parent[cur];
+                    ans.push(edge_idx + 1);
+                }
+                ans.push(idx + 1);
+            }
+        }
+    }
+    // println!("DSU size: {:?}", dsu.size);
+    writeln!(out, "{}", ans.len()).unwrap();
+    ans.sort();
+    array_output(&ans, out);
+    // });
 }
 
 fn main() {

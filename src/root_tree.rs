@@ -1,6 +1,11 @@
+type V<T> = Vec<T>;
+type VV<T> = V<V<T>>;
+type US = usize;
+type UU = (US, US);
+
 // Turn into a farmiliar rooted tree structure
 #[allow(dead_code)]
-fn dfs_root(
+pub fn dfs_root(
     u: usize,
     p: usize,
     l: usize,
@@ -11,11 +16,20 @@ fn dfs_root(
     time_in: &mut Vec<usize>,
     time_out: &mut Vec<usize>,
     global_time: &mut usize,
+    up: &mut VV<US>,
+    lg: usize,
 ) {
     level[u] = l;
     time_in[u] = *global_time;
     time_out[u] = *global_time;
     *global_time += 1;
+
+    // Updating 2^i parent
+    up[u][0] = p;
+    for i in 1..=lg {
+        up[u][i] = up[up[u][i - 1]][i - 1];
+    }
+
     g[u].iter().for_each(|&v| {
         if v == p {
             return;
@@ -31,6 +45,8 @@ fn dfs_root(
             time_in,
             time_out,
             global_time,
+            up,
+            lg,
         );
         parent[v] = u;
         children[u].push(v);
@@ -38,10 +54,103 @@ fn dfs_root(
     });
 }
 
+// Fast template to run for a graph, level start at 0
+#[allow(dead_code)]
+fn runner() {
+    let n = 10;
+    let mut g: VV<US> = vec![V::new(); n];
+    let mut parent = vec![0; n];
+    let mut children: VV<US> = vec![Vec::new(); n];
+    let mut level = vec![0; n];
+    let mut time_in = vec![0; n];
+    let mut time_out = vec![0; n];
+    let mut global_time = 0;
+    let lg = (n as f32).log2() as usize;
+    let mut up: VV<US> = vec![vec![0; lg + 1]; n];
+    dfs_root(
+        0,
+        0,
+        0,
+        &g,
+        &mut parent,
+        &mut children,
+        &mut level,
+        &mut time_in,
+        &mut time_out,
+        &mut global_time,
+        &mut up,
+        lg,
+    );
+}
+
 // Check if u is parent of v
 #[allow(dead_code)]
-fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
+pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
     return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
+}
+
+// Get path from u -> v via backward tracking.
+// u must be parent of v, else will be bogus
+#[allow(dead_code)]
+pub fn get_path_parent(u: US, v: US, parent: &Vec<usize>) -> V<US> {
+    let mut cur = v;
+    let mut ans: V<US> = V::new();
+    ans.push(v);
+    if u == v {
+        return ans;
+    }
+    while parent[cur] != u {
+        let p = parent[cur];
+        cur = p;
+        ans.push(cur);
+    }
+    ans.push(u);
+    ans.reverse();
+    ans
+}
+
+// Get path from u -> v via LCA
+// via u -> LCA, then -> v.
+#[allow(dead_code)]
+pub fn get_lca(u: US, v: US, time_in: &Vec<usize>, time_out: &Vec<usize>, up: &VV<US>) -> usize {
+    if is_parent(u, v, time_in, time_out) {
+        return u;
+    }
+    if is_parent(v, u, time_in, time_out) {
+        return v;
+    }
+    let mut u = u;
+    for i in (0..up.len()).rev() {
+        if !is_parent(up[u][i], v, time_in, time_out) {
+            u = up[u][i];
+        }
+    }
+    up[u][0]
+}
+
+// Get path from u -> v via LCA
+// via u -> LCA, then -> v.
+#[allow(dead_code)]
+pub fn get_path_lca(
+    u: US,
+    v: US,
+    parent: &Vec<usize>,
+    time_in: &Vec<usize>,
+    time_out: &Vec<usize>,
+    up: &VV<US>,
+) -> V<US> {
+    if is_parent(u, v, time_in, time_out) {
+        return get_path_parent(u, v, parent);
+    }
+    if is_parent(v, u, time_in, time_out) {
+        return get_path_parent(v, u, parent);
+    }
+    let lca = get_lca(u, v, time_in, time_out, up);
+    let mut path = get_path_parent(lca, u, parent); // lca -> u
+    path.reverse(); // u -> lca
+    path.pop();
+    path.extend(get_path_parent(lca, v, parent).into_iter()); // Add lca -> v
+    path
 }
 
 #[allow(dead_code)]

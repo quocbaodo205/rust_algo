@@ -190,7 +190,7 @@ impl Combinatoric {
 }
 
 #[allow(dead_code)]
-// Find combination if <num> positions. Useful for include / exclude.
+// Find combination of <num> positions. Useful for include / exclude.
 fn combination(
     v: &Vec<usize>,
     idx: usize,
