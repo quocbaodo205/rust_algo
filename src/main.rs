@@ -6,7 +6,7 @@ use std::{
     fmt::{write, Debug, Display},
     io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
     mem::{self, swap},
-    ops::{self, Bound::*, DerefMut, RangeBounds},
+    ops::{self, Add, AddAssign, Bound::*, DerefMut, RangeBounds},
     rc::Rc,
     str::FromStr,
 };
@@ -572,38 +572,182 @@ fn query(l: u64, r: u64, re: &mut BufReader<Stdin>, li: &mut String) -> u64 {
     ans
 }
 
-// =========================== End template here =======================
+// =============================================================================
+// Template for segment tree that allow flexible Lazy and Value definition
 
-// Check if u is parent of v
+// Lazy operation that allow range add or range set
 #[allow(dead_code)]
-pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
-    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SegtreeLazy {
+    pub val: i32,
+    // Is increase, if false then it's a set operation.
+    // Remember to find all is_inc and change to false should needed.
+    pub is_inc: bool,
 }
 
-// Find the list of span edge, these edges form a spanning tree.
-// All other edges are called back edges, the back edge always point from u to it's sub tree.
-#[allow(dead_code)]
-fn dfs_tree(
-    u: US,
-    p: US,
-    g: &VV<UU>,
-    state: &mut V<CheckState>,
-    span_edges: &mut V<UUU>,
-    back_edges: &mut V<UUU>,
-) {
-    state[u] = CheckState::CHECKED;
-    for &(v, idx) in g[u].iter() {
-        if v == p {
-            continue;
+impl AddAssign for SegtreeLazy {
+    fn add_assign(&mut self, rhs: Self) {
+        if !rhs.is_inc {
+            self.val = 0;
+            self.is_inc = false;
         }
-        if state[v] != CheckState::CHECKED {
-            span_edges.push((u, v, idx));
-            dfs_tree(v, u, g, state, span_edges, back_edges);
-        } else {
-            back_edges.push((u, v, idx));
+        self.val += rhs.val;
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SegtreeValue {
+    mx: i32,
+}
+
+#[allow(dead_code)]
+impl SegtreeValue {
+    // Update from lazy operation
+    pub fn update(&mut self, lz: SegtreeLazy, sz: usize) {
+        if !lz.is_inc {
+            self.mx = 0;
+        }
+        self.mx += lz.val;
+    }
+}
+
+impl Add for SegtreeValue {
+    type Output = SegtreeValue;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        SegtreeValue {
+            mx: max(self.mx, rhs.mx),
         }
     }
 }
+
+pub const LID: SegtreeLazy = SegtreeLazy {
+    val: 0,
+    is_inc: true,
+};
+pub const VID: SegtreeValue = SegtreeValue { mx: -1000000000 };
+
+// ============================== Main structure ====================
+
+#[allow(dead_code)]
+pub struct SegmentTreeLazy {
+    len: usize,
+    tree: Vec<SegtreeValue>,
+    lazy: Vec<SegtreeLazy>,
+}
+
+#[allow(dead_code)]
+impl SegmentTreeLazy {
+    pub fn new(n: usize) -> Self {
+        SegmentTreeLazy {
+            len: n,
+            tree: vec![VID; 4 * n + 10],
+            lazy: vec![LID; 4 * n + 10],
+        }
+    }
+
+    fn build_internal(&mut self, node: usize, tl: usize, tr: usize, a: &[SegtreeValue]) {
+        if tl == tr {
+            self.tree[node] = a[tl];
+        } else {
+            let mid = (tl + tr) / 2;
+            self.build_internal(node * 2, tl, mid, a);
+            self.build_internal(node * 2 + 1, mid + 1, tr, a);
+            self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1];
+        }
+    }
+
+    pub fn build(a: &[SegtreeValue]) -> Self {
+        let mut segment_tree = SegmentTreeLazy {
+            len: a.len(),
+            tree: vec![VID; 4 * a.len() + 10],
+            lazy: vec![LID; 4 * a.len() + 10],
+        };
+        segment_tree.build_internal(1, 0, a.len() - 1, a);
+        segment_tree
+    }
+
+    // Update current node and push lazy to children
+    fn push(&mut self, node: usize, _tl: usize, _tr: usize) {
+        // Update tree
+        let sz = _tr + 1 - _tl;
+        let lzd = self.lazy[node];
+        // println!("Pushing lz = {lzd:?} to node {node}, _tl = {_tl}, tr = {_tr}");
+        // Reset current lazy
+        self.lazy[node] = LID;
+
+        self.tree[node].update(lzd, sz);
+
+        // Update lazy
+        if node * 2 + 1 >= self.tree.len() {
+            return;
+        }
+        self.lazy[node * 2] += lzd;
+        self.lazy[node * 2 + 1] += lzd;
+    }
+
+    fn query_internal(
+        &mut self,
+        node: usize,
+        tl: usize,
+        tr: usize,
+        ql: usize,
+        qr: usize,
+    ) -> SegtreeValue {
+        if ql > qr {
+            return VID;
+        }
+        if tl == ql && tr == qr {
+            self.push(node, tl, tr);
+            return self.tree[node];
+        }
+        self.push(node, tl, tr);
+        let mid = (tl + tr) / 2;
+        let ans = self.query_internal(node * 2, tl, mid, ql, min(qr, mid))
+            + self.query_internal(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr);
+        // println!("Got ans for {tl} {tr} {ql} {qr} = {ans:?}");
+        ans
+    }
+
+    // Query the inclusive range [l..r]
+    pub fn query(&mut self, l: usize, r: usize) -> SegtreeValue {
+        self.query_internal(1, 0, self.len - 1, l, r)
+    }
+
+    // When needed, please apply transformation before passing [val]
+    fn update_internal(
+        &mut self,
+        node: usize,
+        tl: usize,
+        tr: usize,
+        ql: usize,
+        qr: usize,
+        lz: SegtreeLazy,
+    ) {
+        if ql > qr {
+            return;
+        }
+        if tl == ql && tr == qr {
+            self.lazy[node] += lz;
+            self.push(node, tl, tr);
+        } else {
+            self.push(node, tl, tr);
+            let mid = (tl + tr) / 2;
+            self.update_internal(node * 2, tl, mid, ql, min(qr, mid), lz);
+            self.update_internal(node * 2 + 1, mid + 1, tr, max(ql, mid + 1), qr, lz);
+            self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1];
+            // println!("After update, tree node {node} = {:?}", self.tree[node]);
+        }
+    }
+
+    // Update range [l,r] with lazy
+    pub fn update(&mut self, ql: usize, qr: usize, lz: SegtreeLazy) {
+        self.update_internal(1, 0, self.len - 1, ql, qr, lz);
+    }
+}
+
+// =========================== End template here =======================
 
 // Turn into a farmiliar rooted tree structure
 #[allow(dead_code)]
@@ -611,20 +755,28 @@ pub fn dfs_root(
     u: usize,
     p: usize,
     l: usize,
-    g: &Vec<Vec<UU>>,
-    parent: &mut Vec<UU>,
+    g: &Vec<Vec<usize>>,
+    parent: &mut Vec<usize>,
     children: &mut Vec<Vec<usize>>,
     level: &mut Vec<usize>,
     time_in: &mut Vec<usize>,
     time_out: &mut Vec<usize>,
     global_time: &mut usize,
+    up: &mut VV<US>,
+    lg: usize,
 ) {
     level[u] = l;
     time_in[u] = *global_time;
     time_out[u] = *global_time;
     *global_time += 1;
 
-    g[u].iter().for_each(|&(v, idx)| {
+    // Updating 2^i parent
+    up[u][0] = p;
+    for i in 1..=lg {
+        up[u][i] = up[up[u][i - 1]][i - 1];
+    }
+
+    g[u].iter().for_each(|&v| {
         if v == p {
             return;
         }
@@ -639,211 +791,293 @@ pub fn dfs_root(
             time_in,
             time_out,
             global_time,
+            up,
+            lg,
         );
-        parent[v] = (u, idx);
+        parent[v] = u;
         children[u].push(v);
         time_out[u] = time_out[v];
     });
 }
 
-// Get path from u -> v via backward tracking.
-// u must be parent of v, else will be bogus
 #[allow(dead_code)]
-pub fn get_path_parent(u: US, v: US, parent: &Vec<usize>) -> V<US> {
-    let mut cur = v;
-    let mut ans: V<US> = V::new();
-    ans.push(v);
-    if u == v {
-        return ans;
+fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -> usize {
+    tsize[u] = 1;
+    children[u].iter().for_each(|&v| {
+        tsize[u] += dfs_tree_size(v, children, tsize);
+    });
+    tsize[u]
+}
+
+#[allow(dead_code)]
+fn dfs_hld_label(
+    u: usize,
+    children: &Vec<Vec<usize>>,
+    tsize: &Vec<usize>,
+    label: &mut Vec<usize>,
+    global_label: &mut usize,
+) {
+    label[u] = *global_label;
+    *global_label += 1;
+    // Find heavy vertex
+    let mut hv_vertex: Option<usize> = None;
+    let mut best_st = 0;
+    for &v in children[u].iter() {
+        if tsize[v] > best_st {
+            best_st = tsize[v];
+            hv_vertex = Some(v);
+        }
     }
-    while parent[cur] != u {
-        let p = parent[cur];
-        cur = p;
-        ans.push(cur);
+    if let Some(hv) = hv_vertex {
+        dfs_hld_label(hv, children, tsize, label, global_label);
+        // dfs for others
+        for &v in children[u].iter() {
+            if v == hv {
+                continue;
+            }
+            dfs_hld_label(v, children, tsize, label, global_label);
+        }
     }
-    ans.push(u);
-    ans.reverse();
+}
+
+#[allow(dead_code)]
+fn dfs_hld_parent(
+    u: usize,
+    children: &Vec<Vec<usize>>,
+    tsize: &Vec<usize>,
+    parent: &mut Vec<usize>,
+) {
+    // Find heavy vertex
+    let mut hv_vertex: Option<usize> = None;
+    let mut best_st = 0;
+    for &v in children[u].iter() {
+        if tsize[v] > best_st {
+            best_st = tsize[v];
+            hv_vertex = Some(v);
+        }
+    }
+
+    if let Some(hv) = hv_vertex {
+        parent[hv] = parent[u];
+        dfs_hld_parent(hv, children, tsize, parent);
+        // dfs for others
+        for &v in children[u].iter() {
+            if v == hv {
+                continue;
+            }
+            parent[v] = v;
+            dfs_hld_parent(v, children, tsize, parent);
+        }
+    }
+}
+
+// Query HLD but only from u to parent px
+#[allow(dead_code)]
+fn query_hld_to_parent(
+    u: usize,
+    px: usize,
+    parent: &Vec<usize>,
+    hld_parent: &Vec<usize>,
+    label: &Vec<usize>,
+    level: &Vec<usize>,
+    st: &mut SegmentTreeLazy,
+    is_count_last: bool,
+) -> SegtreeValue {
+    // println!("query hld from {u} to {px}");
+    let mut ans = VID;
+    let mut cur = u;
+    while cur != px {
+        // Explore the heavy chain
+        let hp = hld_parent[cur];
+        // println!("cur = {cur}, hp = {hp}");
+        if hp == cur {
+            // Current u -> p is a light edge, goes up light normal
+            // Also query from the segtree cuz why not.
+            let st_ans = st.query(label[cur], label[cur]);
+            // println!("ans for {} is {:?}", label[cur], st_ans);
+            ans = ans + st_ans;
+            cur = parent[cur];
+        } else {
+            // Have a heavy chain:
+            if level[hp] >= level[px] {
+                // Deeper than px, can use full st[hp+1..=cur]
+                // Use the +1 to avoid counting for data[hp], it will cal in the next up edge.
+                let st_ans = st.query(label[hp] + 1, label[cur]);
+                // println!(
+                //     "ans from {} -> {} is {:?}",
+                //     label[hp] + 1,
+                //     label[cur],
+                //     st_ans
+                // );
+                ans = ans + st_ans;
+                cur = hp;
+            } else {
+                // Have to stop at px
+                let st_ans = st.query(label[px] + 1, label[cur]);
+                // println!(
+                //     "ans from {} -> {} is {:?}",
+                //     label[px] + 1,
+                //     label[cur],
+                //     st_ans
+                // );
+                ans = ans + st_ans;
+                cur = px;
+            }
+        }
+    }
+    // Consider the last edge: cur -> px:
+    if is_count_last {
+        let st_ans = st.query(label[px], label[px]);
+        // println!("ans for {} is {:?}", label[px], st_ans);
+        ans = ans + st_ans;
+    }
     ans
 }
 
+// Check if u is parent of v
 #[allow(dead_code)]
-struct DSU {
-    n: usize,
-    parent: Vec<usize>,
-    size: Vec<usize>,
+pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
+    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
 }
 
 #[allow(dead_code)]
-impl DSU {
-    pub fn new(sz: usize) -> Self {
-        DSU {
-            n: sz,
-            parent: (0..sz).collect(),
-            size: vec![1; sz],
+pub fn get_lca(u: US, v: US, time_in: &Vec<usize>, time_out: &Vec<usize>, up: &VV<US>) -> usize {
+    if is_parent(u, v, time_in, time_out) {
+        return u;
+    }
+    if is_parent(v, u, time_in, time_out) {
+        return v;
+    }
+    let mut u = u;
+    for i in (0..up[0].len()).rev() {
+        if !is_parent(up[u][i], v, time_in, time_out) {
+            u = up[u][i];
         }
     }
+    up[u][0]
+}
 
-    pub fn find_parent(&mut self, u: usize) -> usize {
-        if self.parent[u] == u {
-            return u;
-        }
-        self.parent[u] = self.find_parent(self.parent[u]);
-        return self.parent[u];
+#[allow(dead_code)]
+fn query_hld(
+    u: usize,
+    v: usize,
+    parent: &Vec<usize>,
+    hld_parent: &Vec<usize>,
+    time_in: &Vec<usize>,
+    time_out: &Vec<usize>,
+    up: &VV<US>,
+    label: &Vec<usize>,
+    level: &Vec<usize>,
+    st: &mut SegmentTreeLazy,
+) -> SegtreeValue {
+    let lca = get_lca(u, v, time_in, time_out, up);
+    if lca == u {
+        // Only from v to lca
+        return query_hld_to_parent(v, lca, parent, hld_parent, label, level, st, true);
     }
-
-    pub fn union(&mut self, u: usize, v: usize) {
-        let mut pu = self.find_parent(u);
-        let mut pv = self.find_parent(v);
-        if pu == pv {
-            return;
-        }
-        if self.size[pu] > self.size[pv] {
-            swap(&mut pu, &mut pv);
-        }
-        self.size[pu] += self.size[pv];
-        self.parent[pv] = pu;
+    if lca == v {
+        return query_hld_to_parent(u, lca, parent, hld_parent, label, level, st, true);
     }
-
-    pub fn count_set(&mut self) -> usize {
-        (0..self.n).filter(|&u| self.find_parent(u) == u).count()
-    }
+    let ans_u_lca = query_hld_to_parent(u, lca, parent, hld_parent, label, level, st, true);
+    let ans_v_lca_without_lca =
+        query_hld_to_parent(v, lca, parent, hld_parent, label, level, st, false);
+    ans_u_lca + ans_v_lca_without_lca
 }
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
     let default = 0usize;
     // let t = read_1_number(line, reader, 0);
     // (0..t).for_each(|_te| {
-    let (n, m) = read_2_number(line, reader, default);
-    let mut g: VV<UU> = vec![V::new(); n];
-    read_graph_from_edge_list_keep(&mut g, m, true, line, reader);
-    // A DSU of edges: and edges with idx has DSU[idx] = x, meaning it has x cycle containing it.
-    let mut dsu = DSU::new(m + 1);
-    let mut index = vec![0; n];
-    let mut ans: V<US> = V::new();
-    let mut state = vec![CheckState::NOTCHECK; n];
-    // Graph could be un-connected.
-    for st in 0..n {
-        if state[st] == CheckState::CHECKED {
-            continue;
-        }
-        let mut span_edges: V<UUU> = V::new();
-        let mut back_edges: V<UUU> = V::new();
-        dfs_tree(st, st, &g, &mut state, &mut span_edges, &mut back_edges);
-        // Turn it into a tree structure with parent and shit (very often use!!)
-        // Get a list of explored vertex and compress them.
-        let mut unique_val: Set<US> = Set::new();
-        for &(u, v, _) in span_edges.iter() {
-            unique_val.insert(u);
-            unique_val.insert(v);
-        }
-        for &(u, v, _) in back_edges.iter() {
-            unique_val.insert(u);
-            unique_val.insert(v);
-        }
-        let unique_val_arr: V<US> = unique_val.iter().cloned().collect();
-        let nn = unique_val_arr.len();
-        if nn == 0 {
-            // No value, no edge, nothing to do!
-            continue;
-        }
-        let span_edges: V<UUU> = span_edges
-            .iter()
-            .map(|&(u, v, idx)| {
-                (
-                    lower_bound_pos(&unique_val_arr, u),
-                    lower_bound_pos(&unique_val_arr, v),
-                    idx,
-                )
-            })
-            .collect();
-        let back_edges: V<UUU> = back_edges
-            .iter()
-            .map(|&(u, v, idx)| {
-                (
-                    lower_bound_pos(&unique_val_arr, u),
-                    lower_bound_pos(&unique_val_arr, v),
-                    idx,
-                )
-            })
-            .collect();
+    let (n, q) = read_2_number(line, reader, default);
+    let data = read_vec_template(line, reader, default);
 
-        let st = lower_bound_pos(&unique_val_arr, st);
-        let mut gp: VV<UU> = vec![V::new(); nn];
-        for &(u, v, idx) in span_edges.iter() {
-            gp[u].push((v, idx));
-            gp[v].push((u, idx));
-        }
-        let mut parent = vec![(0, 0); nn];
-        let mut children: VV<US> = vec![Vec::new(); nn];
-        let mut level = vec![0; nn];
-        let mut time_in = vec![0; nn];
-        let mut time_out = vec![0; nn];
-        let mut global_time = 1;
-        dfs_root(
-            st,
-            st,
-            0,
-            &gp,
-            &mut parent,
-            &mut children,
-            &mut level,
-            &mut time_in,
-            &mut time_out,
-            &mut global_time,
-        );
-        // Fix the back edge list, since they also contain duplicates.
-        let mut back_edges: V<UUU> = back_edges
-            .iter()
-            .cloned()
-            .filter(|&(u, v, _)| level[u] < level[v])
-            .collect();
-        // println!("span edges: {span_edges:?}");
-        back_edges.sort_by_key(|(u, _, _)| level[*u]);
-        // println!("back edges: {back_edges:?}");
-        for &(u, v, idx) in back_edges.iter() {
-            // For each back-edge (x,y), goes from y upward, each generate and edge (x',y').
-            // obviously (x',y') can't be a bridge. Mark it as unable.
-            let mut cur = v;
-            index[unique_val_arr[v]] = idx + 1;
-            while parent[cur].0 != u {
-                let p = parent[cur].0;
-                if index[unique_val_arr[p]] != 0 {
-                    // This chain is already explored before, no need to go further!
-                    dsu.union(idx + 1, index[unique_val_arr[p]]);
-                    break;
-                }
-                index[unique_val_arr[p]] = idx + 1;
-                cur = p;
-            }
-            // last edge: cur -> p (before break or can be u)
-            if parent[cur].0 != cur {
-                // Either index is fine
-                index[unique_val_arr[parent[cur].0]] = idx + 1;
-            }
-        }
-        for &(u, v, idx) in back_edges.iter() {
-            let group_p = dsu.find_parent(idx + 1);
-            if dsu.size[group_p] == 1 {
-                // Only 1 cycle passed through
-                let mut cur = v;
-                while parent[cur].0 != u {
-                    let (p, edge_idx) = parent[cur];
-                    ans.push(edge_idx + 1);
-                    cur = p;
-                }
-                // last edge: cur -> p (before break or can be u)
-                if parent[cur].0 != cur {
-                    let (p, edge_idx) = parent[cur];
-                    ans.push(edge_idx + 1);
-                }
-                ans.push(idx + 1);
-            }
+    let mut g: VV<US> = vec![V::new(); n];
+    read_graph_from_edge_list(&mut g, n - 1, true, line, reader);
+    // Turn tree into rooted structure
+    let mut parent = vec![0; n];
+    let mut children: VV<US> = vec![Vec::new(); n];
+    let mut level = vec![0; n];
+    let mut time_in = vec![0; n];
+    let mut time_out = vec![0; n];
+    let mut global_time = 0;
+    let lg = (n as f32).log2() as usize;
+    let mut up: VV<US> = vec![vec![0; lg + 1]; n];
+    dfs_root(
+        0,
+        0,
+        0,
+        &g,
+        &mut parent,
+        &mut children,
+        &mut level,
+        &mut time_in,
+        &mut time_out,
+        &mut global_time,
+        &mut up,
+        lg,
+    );
+
+    // println!("children = {children:?}");
+
+    // Get the tree size
+    let mut tsize = vec![0; n];
+    dfs_tree_size(0, &children, &mut tsize);
+    // println!("got the size for each node: {tsize:?}");
+
+    // DFS labeling: so that chain of heavy edges have concescutive label (for segment tree).
+    let mut label = vec![0; n];
+    let mut global_label = 1;
+    dfs_hld_label(0, &children, &tsize, &mut label, &mut global_label);
+    // println!("label = {label:?}");
+
+    // DFS to find for a vertex, its longest hld chain parent.
+    // All the way to the top until you hit a light edge
+    // if (u,v) is a light edge, hld_parent[v] = v.
+    let mut hld_parent = vec![0; n];
+    hld_parent[0] = 0;
+    dfs_hld_parent(0, &children, &tsize, &mut hld_parent);
+    // println!("hld_parent = {hld_parent:?}");
+
+    let mut st = SegmentTreeLazy::new(global_label + 5); // cover all the labels
+    let data: V<SegtreeLazy> = data
+        .into_iter()
+        .map(|x| SegtreeLazy {
+            val: x as i32,
+            is_inc: false,
+        })
+        .collect();
+    for (u, &x) in data.iter().enumerate() {
+        st.update(label[u], label[u], x);
+    }
+    for _ in 0..q {
+        let query = read_vec_template(line, reader, default);
+        if query[0] == 1 {
+            let (u, x) = (query[1] - 1, query[2]);
+            st.update(
+                label[u],
+                label[u],
+                SegtreeLazy {
+                    val: x as i32,
+                    is_inc: false,
+                },
+            );
+        } else {
+            let (u, v) = (query[1] - 1, query[2] - 1);
+            let ans = query_hld(
+                u,
+                v,
+                &parent,
+                &hld_parent,
+                &time_in,
+                &time_out,
+                &up,
+                &label,
+                &level,
+                &mut st,
+            );
+            writeln!(out, "{}", ans.mx).unwrap();
         }
     }
-    // println!("DSU size: {:?}", dsu.size);
-    writeln!(out, "{}", ans.len()).unwrap();
-    ans.sort();
-    array_output(&ans, out);
     // });
 }
 

@@ -4,7 +4,7 @@ use std::{
 };
 
 #[allow(dead_code)]
-struct SegmentTreeMin {
+pub struct SegmentTreeMin {
     len: usize,
     tree_min: Vec<usize>,
 }
@@ -18,14 +18,7 @@ impl SegmentTreeMin {
         }
     }
 
-    fn query_internal_min(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-    ) -> usize {
+    fn query_internal_min(&self, node: usize, tl: usize, tr: usize, ql: usize, qr: usize) -> usize {
         if ql > qr {
             return 1000000000;
         }
@@ -40,7 +33,7 @@ impl SegmentTreeMin {
     }
 
     // Query the inclusive range [l..r]
-    pub fn query_min(&mut self, l: usize, r: usize) -> usize {
+    pub fn query_min(&self, l: usize, r: usize) -> usize {
         self.query_internal_min(1, 0, self.len - 1, l, r)
     }
 
@@ -66,7 +59,7 @@ impl SegmentTreeMin {
 }
 
 #[allow(dead_code)]
-struct SegmentTreeMax {
+pub struct SegmentTreeMax {
     len: usize,
     tree_max: Vec<usize>,
 }
@@ -129,7 +122,7 @@ impl SegmentTreeMax {
 
 // Allow you to check if a range [l,r] is increasing after single change query.
 #[allow(dead_code)]
-struct SegmentTreeIsInc {
+pub struct SegmentTreeIsInc {
     len: usize,
     tree_min: Vec<usize>,
     tree_max: Vec<usize>,
@@ -261,16 +254,17 @@ impl SegmentTreeIsInc {
     }
 }
 
-// Template for segment tree that allow crazy shit
+// =============================================================================
+// Template for segment tree that allow flexible Lazy and Value definition
 
 // Lazy operation that allow range add or range set
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SegtreeLazy {
-    val: i64,
+pub struct SegtreeLazy {
+    pub val: i64,
     // Is increase, if false then it's a set operation.
     // Remember to find all is_inc and change to false should needed.
-    is_inc: bool,
+    pub is_inc: bool,
 }
 
 impl AddAssign for SegtreeLazy {
@@ -285,7 +279,7 @@ impl AddAssign for SegtreeLazy {
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct SegtreeValue {
+pub struct SegtreeValue {
     sum: i64,
     mx: i64,
 }
@@ -314,11 +308,11 @@ impl Add for SegtreeValue {
     }
 }
 
-const LID: SegtreeLazy = SegtreeLazy {
+pub const LID: SegtreeLazy = SegtreeLazy {
     val: 0,
     is_inc: true,
 };
-const VID: SegtreeValue = SegtreeValue {
+pub const VID: SegtreeValue = SegtreeValue {
     sum: 0,
     mx: -1000000000000000000,
 };
@@ -326,7 +320,7 @@ const VID: SegtreeValue = SegtreeValue {
 // ============================== Main structure ====================
 
 #[allow(dead_code)]
-struct SegmentTreeLazy {
+pub struct SegmentTreeLazy {
     len: usize,
     tree: Vec<SegtreeValue>,
     lazy: Vec<SegtreeLazy>,
@@ -448,6 +442,7 @@ mod test {
     use super::*;
     #[test]
     fn test_segment_tree() {
+        // Testing range add + range set / sum + max query in 1 tree:
         let a = [1, 2, 3, 4, 5, 6];
         let tree_val: Vec<SegtreeValue> =
             a.iter().map(|&x| SegtreeValue { sum: x, mx: x }).collect();
