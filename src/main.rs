@@ -4,13 +4,21 @@ use std::{
     cmp::{max, min, Ordering},
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     fmt::{write, Debug, Display},
-    io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
+    io::{self, read_to_string, BufRead, BufReader, BufWriter, Stdin, Stdout, StdoutLock, Write},
     mem::{self, swap},
     ops::{self, Add, AddAssign, Bound::*, DerefMut, RangeBounds},
     rc::Rc,
     str::FromStr,
 };
 
+// DEBUG=1 cargo run < inp to run with println
+macro_rules! println {
+    ($($rest:tt)*) => {
+        if std::env::var("DEBUG").is_ok() {
+            std::println!($($rest)*);
+        }
+    }
+}
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum CheckState {
@@ -306,7 +314,7 @@ where
 type V<T> = Vec<T>;
 type VV<T> = V<V<T>>;
 type Set<T> = BTreeSet<T>;
-type Map<K, V> = BTreeMap<K, V>;
+// type Map<K, V> = BTreeMap<K, V>;
 type US = usize;
 type UU = (US, US);
 type UUU = (US, US, US);
@@ -528,8 +536,12 @@ fn read_edge_list_with_weight(
 fn read_tree_parent_list(g: &mut VV<US>, n: US, line: &mut String, reader: &mut BufReader<Stdin>) {
     // Rooted tree at 0, parent of [1..n-1]
     let parent = read_vec_template(line, reader, 0usize);
-    // Example: 1 1 2 2 4 -> parent of 1 is 0, parent of 2 is 0, ...
-    (0..n - 2).for_each(|i| g[parent[i] - 1].push(i + 1));
+    // p1, p2, ..., pn-1
+    // there's edge between i and (p[i] - 1)
+    (0..n - 1).for_each(|i| {
+        g[parent[i] - 1].push(i + 1);
+        g[i + 1].push(parent[i] - 1);
+    });
 }
 
 #[allow(dead_code)]
@@ -572,182 +584,119 @@ fn query(l: u64, r: u64, re: &mut BufReader<Stdin>, li: &mut String) -> u64 {
     ans
 }
 
+// =========================== End template here =======================
+
 // =============================================================================
 // Template for segment tree that allow flexible Lazy and Value definition
 
-// Lazy operation that allow range add or range set
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SegtreeLazy {
-    pub val: i32,
-    // Is increase, if false then it's a set operation.
-    // Remember to find all is_inc and change to false should needed.
-    pub is_inc: bool,
+#[derive(Copy, Clone, Debug)]
+struct Node {
+    max_suf_sum: i64, // value
+    sum: i64,         // size
+    lz: bool,         // is lazy
 }
 
-impl AddAssign for SegtreeLazy {
-    fn add_assign(&mut self, rhs: Self) {
-        if !rhs.is_inc {
-            self.val = 0;
-            self.is_inc = false;
-        }
-        self.val += rhs.val;
+// Build for node [ql..qr]
+fn build(tree: &mut Vec<Node>, cc: usize, tl: usize, tr: usize) {
+    if tl > tr {
+        return;
     }
-}
-
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SegtreeValue {
-    mx: i32,
-}
-
-#[allow(dead_code)]
-impl SegtreeValue {
-    // Update from lazy operation
-    pub fn update(&mut self, lz: SegtreeLazy, sz: usize) {
-        if !lz.is_inc {
-            self.mx = 0;
-        }
-        self.mx += lz.val;
+    tree[cc].max_suf_sum = -1;
+    tree[cc].sum = -(tr as i64 - tl as i64 + 1);
+    tree[cc].lz = false;
+    if tl == tr {
+        return;
     }
+    let mid = (tl + tr) / 2;
+    build(tree, cc * 2, tl, mid);
+    build(tree, cc * 2 + 1, mid + 1, tr);
 }
 
-impl Add for SegtreeValue {
-    type Output = SegtreeValue;
+fn push(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize) {
+    // Has lazy val
+    if ql > qr {
+        return;
+    }
+    if tree[cc].lz {
+        let mid = (ql + qr) / 2;
+        tree[cc].lz = false;
+        tree[cc * 2].lz = true;
+        tree[cc * 2 + 1].lz = true;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        SegtreeValue {
-            mx: max(self.mx, rhs.mx),
-        }
+        // Update the tree correctly: when set -1 for bunch of nodes (has lz), always update correct sum.
+        tree[cc * 2].max_suf_sum = -1;
+        tree[cc * 2].sum = -(mid as i64 - ql as i64 + 1);
+
+        tree[cc * 2 + 1].max_suf_sum = -1;
+        tree[cc * 2 + 1].sum = -(qr as i64 - mid as i64);
     }
 }
 
-pub const LID: SegtreeLazy = SegtreeLazy {
-    val: 0,
-    is_inc: true,
-};
-pub const VID: SegtreeValue = SegtreeValue { mx: -1000000000 };
-
-// ============================== Main structure ====================
-
-#[allow(dead_code)]
-pub struct SegmentTreeLazy {
-    len: usize,
-    tree: Vec<SegtreeValue>,
-    lazy: Vec<SegtreeLazy>,
-}
-
-#[allow(dead_code)]
-impl SegmentTreeLazy {
-    pub fn new(n: usize) -> Self {
-        SegmentTreeLazy {
-            len: n,
-            tree: vec![VID; 4 * n + 10],
-            lazy: vec![LID; 4 * n + 10],
-        }
-    }
-
-    fn build_internal(&mut self, node: usize, tl: usize, tr: usize, a: &[SegtreeValue]) {
-        if tl == tr {
-            self.tree[node] = a[tl];
-        } else {
-            let mid = (tl + tr) / 2;
-            self.build_internal(node * 2, tl, mid, a);
-            self.build_internal(node * 2 + 1, mid + 1, tr, a);
-            self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1];
-        }
-    }
-
-    pub fn build(a: &[SegtreeValue]) -> Self {
-        let mut segment_tree = SegmentTreeLazy {
-            len: a.len(),
-            tree: vec![VID; 4 * a.len() + 10],
-            lazy: vec![LID; 4 * a.len() + 10],
-        };
-        segment_tree.build_internal(1, 0, a.len() - 1, a);
-        segment_tree
-    }
-
-    // Update current node and push lazy to children
-    fn push(&mut self, node: usize, _tl: usize, _tr: usize) {
-        // Update tree
-        let sz = _tr + 1 - _tl;
-        let lzd = self.lazy[node];
-        // println!("Pushing lz = {lzd:?} to node {node}, _tl = {_tl}, tr = {_tr}");
-        // Reset current lazy
-        self.lazy[node] = LID;
-
-        self.tree[node].update(lzd, sz);
-
-        // Update lazy
-        if node * 2 + 1 >= self.tree.len() {
-            return;
-        }
-        self.lazy[node * 2] += lzd;
-        self.lazy[node * 2 + 1] += lzd;
-    }
-
-    fn query_internal(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-    ) -> SegtreeValue {
-        if ql > qr {
-            return VID;
-        }
-        if tl == ql && tr == qr {
-            self.push(node, tl, tr);
-            return self.tree[node];
-        }
-        self.push(node, tl, tr);
-        let mid = (tl + tr) / 2;
-        let ans = self.query_internal(node * 2, tl, mid, ql, min(qr, mid))
-            + self.query_internal(node * 2 + 1, mid + 1, tr, max(mid + 1, ql), qr);
-        // println!("Got ans for {tl} {tr} {ql} {qr} = {ans:?}");
-        ans
-    }
-
-    // Query the inclusive range [l..r]
-    pub fn query(&mut self, l: usize, r: usize) -> SegtreeValue {
-        self.query_internal(1, 0, self.len - 1, l, r)
-    }
-
-    // When needed, please apply transformation before passing [val]
-    fn update_internal(
-        &mut self,
-        node: usize,
-        tl: usize,
-        tr: usize,
-        ql: usize,
-        qr: usize,
-        lz: SegtreeLazy,
-    ) {
-        if ql > qr {
-            return;
-        }
-        if tl == ql && tr == qr {
-            self.lazy[node] += lz;
-            self.push(node, tl, tr);
-        } else {
-            self.push(node, tl, tr);
-            let mid = (tl + tr) / 2;
-            self.update_internal(node * 2, tl, mid, ql, min(qr, mid), lz);
-            self.update_internal(node * 2 + 1, mid + 1, tr, max(ql, mid + 1), qr, lz);
-            self.tree[node] = self.tree[node * 2] + self.tree[node * 2 + 1];
-            // println!("After update, tree node {node} = {:?}", self.tree[node]);
-        }
-    }
-
-    // Update range [l,r] with lazy
-    pub fn update(&mut self, ql: usize, qr: usize, lz: SegtreeLazy) {
-        self.update_internal(1, 0, self.len - 1, ql, qr, lz);
+fn merge(lc: Node, rc: Node) -> Node {
+    Node {
+        max_suf_sum: max(lc.max_suf_sum + rc.sum, rc.max_suf_sum),
+        sum: lc.sum + rc.sum,
+        lz: false,
     }
 }
 
-// =========================== End template here =======================
+// Only allow +val in a single position (no lazy).
+fn update_plus(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, position: usize, val: i64) {
+    if ql == qr {
+        tree[cc].max_suf_sum += val;
+        tree[cc].sum += val;
+        return;
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if position <= mid {
+        update_plus(tree, cc * 2, ql, mid, position, val);
+    } else {
+        update_plus(tree, cc * 2 + 1, mid + 1, qr, position, val);
+    }
+    tree[cc] = merge(tree[cc * 2], tree[cc * 2 + 1]);
+}
+
+// Set with lazy: only allow set -1 so no val.
+fn update_set(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, l: usize, r: usize) {
+    if l > r {
+        return;
+    }
+    if ql == l && qr == r {
+        tree[cc].lz = true;
+        tree[cc].max_suf_sum = -1;
+        tree[cc].sum = -(qr as i64 - ql as i64 + 1);
+        return;
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if r <= mid {
+        update_set(tree, cc * 2, ql, mid, l, r);
+    } else if l > mid {
+        update_set(tree, cc * 2 + 1, mid + 1, qr, l, r);
+    } else {
+        update_set(tree, cc * 2, ql, mid, l, mid);
+        update_set(tree, cc * 2 + 1, mid + 1, qr, mid + 1, r);
+    }
+    tree[cc] = merge(tree[cc * 2], tree[cc * 2 + 1]);
+}
+
+fn tree_query(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, l: usize, r: usize) -> Node {
+    if ql == l && qr == r {
+        return tree[cc];
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if r <= mid {
+        return tree_query(tree, cc * 2, ql, mid, l, r);
+    } else if l > mid {
+        return tree_query(tree, cc * 2 + 1, mid + 1, qr, l, r);
+    } else {
+        let left_ans = tree_query(tree, cc * 2, ql, mid, l, mid);
+        let right_ans = tree_query(tree, cc * 2 + 1, mid + 1, qr, mid + 1, r);
+        return merge(left_ans, right_ans);
+    }
+}
 
 // Turn into a farmiliar rooted tree structure
 #[allow(dead_code)]
@@ -800,6 +749,12 @@ pub fn dfs_root(
     });
 }
 
+// Check if u is parent of v
+#[allow(dead_code)]
+pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
+    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
+}
+
 #[allow(dead_code)]
 fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -> usize {
     tsize[u] = 1;
@@ -809,15 +764,20 @@ fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -
     tsize[u]
 }
 
+// ======================== Heavy-light decomposition ==============================
+// Useful for vertex / edge update and queries involve paths
+
 #[allow(dead_code)]
 fn dfs_hld_label(
     u: usize,
     children: &Vec<Vec<usize>>,
     tsize: &Vec<usize>,
     label: &mut Vec<usize>,
+    max_label: &mut Vec<usize>,
     global_label: &mut usize,
 ) {
     label[u] = *global_label;
+    max_label[u] = *global_label;
     *global_label += 1;
     // Find heavy vertex
     let mut hv_vertex: Option<usize> = None;
@@ -829,13 +789,15 @@ fn dfs_hld_label(
         }
     }
     if let Some(hv) = hv_vertex {
-        dfs_hld_label(hv, children, tsize, label, global_label);
+        dfs_hld_label(hv, children, tsize, label, max_label, global_label);
+        max_label[u] = max(max_label[u], max_label[hv]);
         // dfs for others
         for &v in children[u].iter() {
             if v == hv {
                 continue;
             }
-            dfs_hld_label(v, children, tsize, label, global_label);
+            dfs_hld_label(v, children, tsize, label, max_label, global_label);
+            max_label[u] = max(max_label[u], max_label[v]);
         }
     }
 }
@@ -880,120 +842,100 @@ fn query_hld_to_parent(
     hld_parent: &Vec<usize>,
     label: &Vec<usize>,
     level: &Vec<usize>,
-    st: &mut SegmentTreeLazy,
+    st: &mut Vec<Node>,
+    n: usize,
     is_count_last: bool,
-) -> SegtreeValue {
+) -> i64 {
     // println!("query hld from {u} to {px}");
-    let mut ans = VID;
     let mut cur = u;
+    let mut res = -1000000000000000000;
+    let mut cur_sum = 0;
     while cur != px {
         // Explore the heavy chain
         let hp = hld_parent[cur];
-        // println!("cur = {cur}, hp = {hp}");
+        println!("cur = {cur}, hp = {hp}");
         if hp == cur {
             // Current u -> p is a light edge, goes up light normal
             // Also query from the segtree cuz why not.
-            let st_ans = st.query(label[cur], label[cur]);
-            // println!("ans for {} is {:?}", label[cur], st_ans);
-            ans = ans + st_ans;
+            let st_ans = tree_query(st, 1, 1, n, label[cur], label[cur]);
+            println!("ans for {} is {:?}", label[cur], st_ans);
+            // Only care about max suffix sum
+            res = max(res, cur_sum + st_ans.max_suf_sum);
+            cur_sum += st_ans.sum;
+            // ans = st_ans + ans;
+            // println!("total ans = {ans:?}");
+            // max_suf_sum = max(max_suf_sum, total_sum + st_ans.max_suf);
+            // println!("Current max_suf_sum = {max_suf_sum}");
+            // total_sum += st_ans.sum;
             cur = parent[cur];
         } else {
             // Have a heavy chain:
-            if level[hp] >= level[px] {
+            if level[hp] > level[px] {
                 // Deeper than px, can use full st[hp+1..=cur]
                 // Use the +1 to avoid counting for data[hp], it will cal in the next up edge.
-                let st_ans = st.query(label[hp] + 1, label[cur]);
-                // println!(
-                //     "ans from {} -> {} is {:?}",
-                //     label[hp] + 1,
-                //     label[cur],
-                //     st_ans
-                // );
-                ans = ans + st_ans;
+                if label[hp] + 1 <= label[cur] {
+                    let st_ans = tree_query(st, 1, 1, n, label[hp] + 1, label[cur]);
+                    println!(
+                        "ans from {} -> {} is {:?}",
+                        label[hp] + 1,
+                        label[cur],
+                        st_ans
+                    );
+                    // max_suf_sum = max(max_suf_sum, total_sum + st_ans.max_suf);
+                    // println!("Current max_suf_sum = {max_suf_sum}");
+                    // total_sum += st_ans.sum;
+                    // ans = st_ans + ans;
+                    res = max(res, cur_sum + st_ans.max_suf_sum);
+                    cur_sum += st_ans.sum;
+                    // println!("total ans = {ans:?}");
+                }
                 cur = hp;
             } else {
                 // Have to stop at px
-                let st_ans = st.query(label[px] + 1, label[cur]);
-                // println!(
-                //     "ans from {} -> {} is {:?}",
-                //     label[px] + 1,
-                //     label[cur],
-                //     st_ans
-                // );
-                ans = ans + st_ans;
+                if label[px] + 1 <= label[cur] {
+                    let st_ans = tree_query(st, 1, 1, n, label[px] + 1, label[cur]);
+                    println!(
+                        "ans from {} -> {} is {:?}",
+                        label[px] + 1,
+                        label[cur],
+                        st_ans
+                    );
+                    // max_suf_sum = max(max_suf_sum, total_sum + st_ans.max_suf);
+                    // println!("Current max_suf_sum = {max_suf_sum}");
+                    // total_sum += st_ans.sum;
+                    res = max(res, cur_sum + st_ans.max_suf_sum);
+                    cur_sum += st_ans.sum;
+                    // ans = st_ans + ans;
+                    // println!("total ans = {ans:?}");
+                }
                 cur = px;
             }
         }
     }
     // Consider the last edge: cur -> px:
     if is_count_last {
-        let st_ans = st.query(label[px], label[px]);
-        // println!("ans for {} is {:?}", label[px], st_ans);
-        ans = ans + st_ans;
+        let st_ans = tree_query(st, 1, 1, n, label[px], label[px]);
+        // let st_ans = st.query(label[px], label[px]);
+        println!("ans for {} is {:?}", label[px], st_ans);
+        // max_suf_sum = max(max_suf_sum, total_sum + st_ans.max_suf);
+        // println!("Current max_suf_sum = {max_suf_sum}");
+        res = max(res, cur_sum + st_ans.max_suf_sum);
+        cur_sum += st_ans.sum;
+        // ans = st_ans + ans;
+        // println!("total ans = {ans:?}");
     }
-    ans
+    res
+    // ans
+    // ans.max_suf
 }
 
-// Check if u is parent of v
-#[allow(dead_code)]
-pub fn is_parent(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
-    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
-}
-
-#[allow(dead_code)]
-pub fn get_lca(u: US, v: US, time_in: &Vec<usize>, time_out: &Vec<usize>, up: &VV<US>) -> usize {
-    if is_parent(u, v, time_in, time_out) {
-        return u;
-    }
-    if is_parent(v, u, time_in, time_out) {
-        return v;
-    }
-    let mut u = u;
-    for i in (0..up[0].len()).rev() {
-        if !is_parent(up[u][i], v, time_in, time_out) {
-            u = up[u][i];
-        }
-    }
-    up[u][0]
-}
-
-#[allow(dead_code)]
-fn query_hld(
-    u: usize,
-    v: usize,
-    parent: &Vec<usize>,
-    hld_parent: &Vec<usize>,
-    time_in: &Vec<usize>,
-    time_out: &Vec<usize>,
-    up: &VV<US>,
-    label: &Vec<usize>,
-    level: &Vec<usize>,
-    st: &mut SegmentTreeLazy,
-) -> SegtreeValue {
-    let lca = get_lca(u, v, time_in, time_out, up);
-    if lca == u {
-        // Only from v to lca
-        return query_hld_to_parent(v, lca, parent, hld_parent, label, level, st, true);
-    }
-    if lca == v {
-        return query_hld_to_parent(u, lca, parent, hld_parent, label, level, st, true);
-    }
-    let ans_u_lca = query_hld_to_parent(u, lca, parent, hld_parent, label, level, st, true);
-    let ans_v_lca_without_lca =
-        query_hld_to_parent(v, lca, parent, hld_parent, label, level, st, false);
-    ans_u_lca + ans_v_lca_without_lca
-}
-
-fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<Stdout>) {
+fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<StdoutLock>) {
     let default = 0usize;
     // let t = read_1_number(line, reader, 0);
     // (0..t).for_each(|_te| {
     let (n, q) = read_2_number(line, reader, default);
-    let data = read_vec_template(line, reader, default);
-
     let mut g: VV<US> = vec![V::new(); n];
-    read_graph_from_edge_list(&mut g, n - 1, true, line, reader);
-    // Turn tree into rooted structure
+    read_tree_parent_list(&mut g, n, line, reader);
     let mut parent = vec![0; n];
     let mut children: VV<US> = vec![Vec::new(); n];
     let mut level = vec![0; n];
@@ -1017,18 +959,23 @@ fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<S
         lg,
     );
 
-    // println!("children = {children:?}");
-
     // Get the tree size
     let mut tsize = vec![0; n];
     dfs_tree_size(0, &children, &mut tsize);
-    // println!("got the size for each node: {tsize:?}");
 
     // DFS labeling: so that chain of heavy edges have concescutive label (for segment tree).
+    // Also get the max label of the subchild of v: useful to update the whole subtree at once!
     let mut label = vec![0; n];
+    let mut max_label = vec![0; n];
     let mut global_label = 1;
-    dfs_hld_label(0, &children, &tsize, &mut label, &mut global_label);
-    // println!("label = {label:?}");
+    dfs_hld_label(
+        0,
+        &children,
+        &tsize,
+        &mut label,
+        &mut max_label,
+        &mut global_label,
+    );
 
     // DFS to find for a vertex, its longest hld chain parent.
     // All the way to the top until you hit a light edge
@@ -1036,55 +983,85 @@ fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<S
     let mut hld_parent = vec![0; n];
     hld_parent[0] = 0;
     dfs_hld_parent(0, &children, &tsize, &mut hld_parent);
-    // println!("hld_parent = {hld_parent:?}");
 
-    let mut st = SegmentTreeLazy::new(global_label + 5); // cover all the labels
-    let data: V<SegtreeLazy> = data
-        .into_iter()
-        .map(|x| SegtreeLazy {
-            val: x as i32,
-            is_inc: false,
-        })
-        .collect();
-    for (u, &x) in data.iter().enumerate() {
-        st.update(label[u], label[u], x);
-    }
+    println!("children: {children:?}");
+    println!("label: {label:?}");
+    println!("max_label: {max_label:?}");
+    println!("hld_parent: {hld_parent:?}");
+
+    let mut st: Vec<Node> = vec![
+        Node {
+            max_suf_sum: -1000000000000000000,
+            sum: 0,
+            lz: false
+        };
+        4 * n + 20
+    ];
+    build(&mut st, 1, 1, n);
+
+    // let mut ald_print = 0;
     for _ in 0..q {
-        let query = read_vec_template(line, reader, default);
-        if query[0] == 1 {
-            let (u, x) = (query[1] - 1, query[2]);
-            st.update(
-                label[u],
-                label[u],
-                SegtreeLazy {
-                    val: x as i32,
-                    is_inc: false,
-                },
-            );
-        } else {
-            let (u, v) = (query[1] - 1, query[2] - 1);
-            let ans = query_hld(
-                u,
-                v,
-                &parent,
-                &hld_parent,
-                &time_in,
-                &time_out,
-                &up,
-                &label,
-                &level,
-                &mut st,
-            );
-            writeln!(out, "{}", ans.mx).unwrap();
+        let (tp, u) = read_2_number(line, reader, default);
+        let u = u - 1;
+        println!("Query {tp} / {u}: ==============================================");
+        match tp {
+            1 => {
+                println!("Setting +1 to label {}", label[u]);
+                // Add 1 to u
+                update_plus(&mut st, 1, 1, n, label[u], 1);
+            }
+            2 => {
+                println!("Setting -1 to label {} -> {}", label[u], max_label[u]);
+                // Setting the subtree, all to -1.
+                update_set(&mut st, 1, 1, n, label[u], max_label[u]);
+                // Also have to query from u to root: Making sure that query from u is negative (white)
+                let q_ans = query_hld_to_parent(
+                    u,
+                    0,
+                    &parent,
+                    &hld_parent,
+                    &label,
+                    &level,
+                    &mut st,
+                    n,
+                    true,
+                );
+                if q_ans >= 0 {
+                    // Set -1 doesn't work, resulted in max_suf_sum.
+                    println!("Also add {} to label {}", -q_ans - 1, label[u]);
+                    update_plus(&mut st, 1, 1, n, label[u], -q_ans - 1);
+                }
+            }
+            3 => {
+                let q_ans = query_hld_to_parent(
+                    u,
+                    0,
+                    &parent,
+                    &hld_parent,
+                    &label,
+                    &level,
+                    &mut st,
+                    n,
+                    true,
+                );
+                if q_ans < 0 {
+                    writeln!(out, "white").unwrap();
+                } else {
+                    writeln!(out, "black").unwrap();
+                }
+                // ald_print += 1;
+            }
+            _ => {}
         }
     }
+
     // });
 }
 
 fn main() {
     let mut reader = BufReader::new(io::stdin());
     let mut line = String::new();
-    let mut out = BufWriter::new(io::stdout());
+    let mut out = BufWriter::new(io::stdout().lock());
 
     solve(&mut reader, &mut line, &mut out);
 }

@@ -567,3 +567,437 @@ mod test {
         );
     }
 }
+
+// ============== Lib checker segment tree that I use for speed ================
+
+// https://judge.yosupo.jp/problem/range_affine_range_sum
+// https://judge.yosupo.jp/submission/214491
+// Update i in [l..r): a[i] = a[i] * b + c
+// st.apply(l, r, affine(b, c));
+// let ans = st.sum(l, r);
+// Init:
+// let a: Vec<(i32, i32)> = v.iter().map(|&x| (x, 1));
+// let mut st = LazySegTree::from(a);
+use lazy_segtree::*;
+impl Monoid for (i32, i32) {
+    fn id() -> Self {
+        (0, 0)
+    }
+    fn op(&self, other: &Self) -> Self {
+        (self.0 + other.0, self.1 + other.1)
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Affine {
+    a: i32,
+    b: i32,
+}
+fn affine(a: i32, b: i32) -> Affine {
+    Affine { a, b }
+}
+impl Monoid for Affine {
+    fn id() -> Self {
+        affine(1, 0)
+    }
+    fn op(&self, other: &Self) -> Self {
+        affine(self.a * other.a, self.a * other.b + self.b)
+    }
+}
+impl Map<(i32, i32)> for Affine {
+    fn map(&self, x: &(i32, i32)) -> (i32, i32) {
+        (self.a * x.0 + self.b * x.1, x.1)
+    }
+}
+pub mod lazy_segtree {
+    use std::mem;
+    pub trait Monoid {
+        fn id() -> Self;
+        fn op(&self, other: &Self) -> Self;
+    }
+    pub trait Map<T> {
+        fn map(&self, value: &T) -> T;
+    }
+    pub struct LazySegTree<T, F> {
+        a: Vec<T>,
+        f: Vec<F>,
+    }
+    impl<T: Monoid, F: Map<T> + Monoid> LazySegTree<T, F> {
+        pub fn new(len: usize) -> Self {
+            Self {
+                a: (0..2 * len).map(|_| T::id()).collect(),
+                f: (0..len).map(|_| F::id()).collect(),
+            }
+        }
+        pub fn len(&self) -> usize {
+            self.a.len() / 2
+        }
+        pub fn sum(&self, l: usize, r: usize) -> T {
+            if l == r {
+                return T::id();
+            }
+            let mut l = l + self.len();
+            l >>= l.trailing_zeros();
+            let mut r = r + self.len();
+            r >>= r.trailing_zeros();
+            let mut sum_l = T::id();
+            let mut sum_r = T::id();
+            loop {
+                if l >= r {
+                    let mut i = l / 2;
+                    sum_l = sum_l.op(&self.a[l]);
+                    l += 1;
+                    l >>= l.trailing_zeros();
+                    while i > l / 2 {
+                        sum_l = self.f[i].map(&sum_l);
+                        i /= 2;
+                    }
+                } else {
+                    let mut i = r / 2;
+                    r -= 1;
+                    sum_r = self.a[r].op(&sum_r);
+                    r >>= r.trailing_zeros();
+                    while i > r / 2 {
+                        sum_r = self.f[i].map(&sum_r);
+                        i /= 2;
+                    }
+                }
+                if l == r {
+                    break;
+                }
+            }
+            let mut sum = sum_l.op(&sum_r);
+            let mut i = l / 2;
+            while i > 0 {
+                sum = self.f[i].map(&sum);
+                i /= 2;
+            }
+            sum
+        }
+        pub fn apply(&mut self, l: usize, r: usize, f: F) {
+            if l == r {
+                return;
+            }
+            let mut l = l + self.len();
+            l >>= l.trailing_zeros();
+            let mut r = r + self.len();
+            r >>= r.trailing_zeros();
+            let (l_orig, r_orig) = (l, r);
+            self.propagate(l / 2);
+            self.propagate((r - 1) / 2);
+            loop {
+                if l >= r {
+                    self.a[l] = f.map(&self.a[l]);
+                    if let Some(fl) = self.f.get_mut(l) {
+                        *fl = f.op(fl);
+                    }
+                    l += 1;
+                    l >>= l.trailing_zeros();
+                } else {
+                    r -= 1;
+                    self.a[r] = f.map(&self.a[r]);
+                    if let Some(fr) = self.f.get_mut(r) {
+                        *fr = f.op(fr);
+                    }
+                    r >>= r.trailing_zeros();
+                }
+                if l == r {
+                    break;
+                }
+            }
+            self.update_path(l_orig / 2);
+            self.update_path((r_orig - 1) / 2);
+        }
+        fn propagate(&mut self, i: usize) {
+            let h = usize::BITS - i.leading_zeros();
+            for k in (0..h).rev() {
+                let p = i >> k;
+                let l = 2 * p;
+                let r = 2 * p + 1;
+                let f = mem::replace(&mut self.f[p], F::id());
+                self.a[l] = f.map(&self.a[l]);
+                if let Some(fl) = self.f.get_mut(l) {
+                    *fl = f.op(fl);
+                }
+                self.a[r] = f.map(&self.a[r]);
+                if let Some(fr) = self.f.get_mut(r) {
+                    *fr = f.op(fr);
+                }
+            }
+        }
+        fn update_path(&mut self, mut i: usize) {
+            while i > 0 {
+                self.a[i] = self.a[2 * i].op(&self.a[2 * i + 1]);
+                i /= 2;
+            }
+        }
+    }
+    impl<T: Monoid, F: Monoid> From<Vec<T>> for LazySegTree<T, F> {
+        fn from(mut a: Vec<T>) -> Self {
+            let len = a.len();
+            a.reserve(len);
+            let ptr = a.as_mut_ptr();
+            unsafe {
+                ptr.copy_to(ptr.add(len), len);
+                for i in (1..len).rev() {
+                    ptr.add(i)
+                        .write(T::op(&*ptr.add(2 * i), &*ptr.add(2 * i + 1)));
+                }
+                ptr.write(T::id());
+                a.set_len(2 * len);
+            }
+            let f = (0..len).map(|_| F::id()).collect();
+            Self { a, f }
+        }
+    }
+}
+
+pub mod lazy_seg_tree {
+    pub trait Monoid {
+        fn id() -> Self;
+        fn op(&self, other: &Self) -> Self;
+    }
+    pub trait Map<T> {
+        fn map(&self, x: T) -> T;
+    }
+    pub struct LazySegTree<T, F> {
+        ss: Box<[T]>,
+        fs: Box<[F]>,
+    }
+    impl<T: Monoid, F: Monoid + Map<T>> LazySegTree<T, F> {
+        pub fn new(n: usize) -> Self {
+            use std::iter::repeat_with;
+            let len = 2 * n.next_power_of_two();
+            Self {
+                ss: repeat_with(T::id).take(len).collect(),
+                fs: repeat_with(F::id).take(len).collect(),
+            }
+        }
+        fn len(&self) -> usize {
+            self.ss.len() / 2
+        }
+        fn propagate(&mut self, i: usize) {
+            let h = 8 * std::mem::size_of::<usize>() as u32 - i.leading_zeros();
+            for k in (1..h).rev() {
+                let p = i >> k;
+                let l = 2 * p;
+                let r = 2 * p + 1;
+                self.ss[l] = self.fs[p].map(std::mem::replace(&mut self.ss[l], T::id()));
+                self.ss[r] = self.fs[p].map(std::mem::replace(&mut self.ss[r], T::id()));
+                self.fs[l] = self.fs[p].op(&self.fs[l]);
+                self.fs[r] = self.fs[p].op(&self.fs[r]);
+                self.fs[p] = F::id();
+            }
+        }
+        pub fn prod(&mut self, l: usize, r: usize) -> T {
+            assert!(l <= r);
+            assert!(r <= self.len());
+            let mut l = l + self.len();
+            let mut r = r + self.len();
+            self.propagate(l >> l.trailing_zeros());
+            self.propagate((r >> r.trailing_zeros()) - 1);
+            let mut lv = T::id();
+            let mut rv = T::id();
+            while l < r {
+                if l % 2 == 1 {
+                    lv = lv.op(&self.ss[l]);
+                    l += 1;
+                }
+                if r % 2 == 1 {
+                    r -= 1;
+                    rv = self.ss[r].op(&rv);
+                }
+                l /= 2;
+                r /= 2;
+            }
+            lv.op(&rv)
+        }
+        pub fn set(&mut self, i: usize, v: T) {
+            let mut i = i + self.len();
+            self.propagate(i);
+            self.ss[i] = v;
+            while i > 1 {
+                i /= 2;
+                self.ss[i] = self.ss[2 * i].op(&self.ss[2 * i + 1]);
+            }
+        }
+        pub fn apply(&mut self, l: usize, r: usize, f: &F) {
+            assert!(l <= r);
+            assert!(r <= self.len());
+            let mut li = l + self.len();
+            let mut ri = r + self.len();
+            let ln = li >> li.trailing_zeros();
+            let rn = ri >> ri.trailing_zeros();
+            self.propagate(ln);
+            self.propagate(rn - 1);
+            while li < ri {
+                if li % 2 == 1 {
+                    self.fs[li] = f.op(&self.fs[li]);
+                    self.ss[li] = f.map(std::mem::replace(&mut self.ss[li], T::id()));
+                    li += 1;
+                }
+                if ri % 2 == 1 {
+                    ri -= 1;
+                    self.fs[ri] = f.op(&self.fs[ri]);
+                    self.ss[ri] = f.map(std::mem::replace(&mut self.ss[ri], T::id()));
+                }
+                li /= 2;
+                ri /= 2;
+            }
+            let mut l = (l + self.len()) / 2;
+            let mut r = (r + self.len() - 1) / 2;
+            while l > 0 {
+                if l < ln {
+                    self.ss[l] = self.ss[2 * l].op(&self.ss[2 * l + 1]);
+                }
+                if r < rn - 1 {
+                    self.ss[r] = self.ss[2 * r].op(&self.ss[2 * r + 1]);
+                }
+                l /= 2;
+                r /= 2;
+            }
+        }
+    }
+    impl<T: Monoid, F: Monoid + Map<T>> std::iter::FromIterator<T> for LazySegTree<T, F> {
+        fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
+            let mut ss: Vec<_> = iter.into_iter().collect();
+            let iter_n = ss.len();
+            let n = iter_n.next_power_of_two();
+            ss.splice(..0, std::iter::repeat_with(T::id).take(n));
+            ss.extend(std::iter::repeat_with(T::id).take(n - iter_n));
+            debug_assert_eq!(ss.len(), 2 * n);
+            for i in (1..n).rev() {
+                ss[i] = ss[2 * i].op(&ss[2 * i + 1]);
+            }
+            Self {
+                ss: ss.into(),
+                fs: std::iter::repeat_with(F::id).take(2 * n).collect(),
+            }
+        }
+    }
+}
+
+// ============================ The only trustable segment tree code lol ===================
+// Tracking max suffix sum (useful for tree based problem)
+// Also a good template for changing the lazy prop + merge node.
+
+// let mut st: Vec<Node> = vec![
+//     Node {
+//         max_suf_sum: -1000000000000000000,
+//         sum: 0,
+//         lz: false
+//     };
+//     4 * n + 20
+// ];
+// build(&mut st, 1, 1, n);
+// to update: update_plus(&mut st, 1, 1, n, label[u], 1);
+// update_set(&mut st, 1, 1, n, label[u], max_label[u]);
+// let st_ans = tree_query(st, 1, 1, n, label[cur], label[cur]);
+
+#[derive(Copy, Clone, Debug)]
+struct Node {
+    max_suf_sum: i64, // value
+    sum: i64,         // size
+    lz: bool,         // is lazy
+}
+
+// Build for node [ql..qr]
+fn build(tree: &mut Vec<Node>, cc: usize, tl: usize, tr: usize) {
+    if tl > tr {
+        return;
+    }
+    tree[cc].max_suf_sum = -1;
+    tree[cc].sum = -(tr as i64 - tl as i64 + 1);
+    tree[cc].lz = false;
+    if tl == tr {
+        return;
+    }
+    let mid = (tl + tr) / 2;
+    build(tree, cc * 2, tl, mid);
+    build(tree, cc * 2 + 1, mid + 1, tr);
+}
+
+fn push(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize) {
+    // Has lazy val
+    if ql > qr {
+        return;
+    }
+    if tree[cc].lz {
+        let mid = (ql + qr) / 2;
+        tree[cc].lz = false;
+        tree[cc * 2].lz = true;
+        tree[cc * 2 + 1].lz = true;
+
+        // Update the tree correctly: when set -1 for bunch of nodes (has lz), always update correct sum.
+        tree[cc * 2].max_suf_sum = -1;
+        tree[cc * 2].sum = -(mid as i64 - ql as i64 + 1);
+
+        tree[cc * 2 + 1].max_suf_sum = -1;
+        tree[cc * 2 + 1].sum = -(qr as i64 - mid as i64);
+    }
+}
+
+fn merge(lc: Node, rc: Node) -> Node {
+    Node {
+        max_suf_sum: max(lc.max_suf_sum + rc.sum, rc.max_suf_sum),
+        sum: lc.sum + rc.sum,
+        lz: false,
+    }
+}
+
+// Only allow +val in a single position (no lazy).
+fn update_plus(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, position: usize, val: i64) {
+    if ql == qr {
+        tree[cc].max_suf_sum += val;
+        tree[cc].sum += val;
+        return;
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if position <= mid {
+        update_plus(tree, cc * 2, ql, mid, position, val);
+    } else {
+        update_plus(tree, cc * 2 + 1, mid + 1, qr, position, val);
+    }
+    tree[cc] = merge(tree[cc * 2], tree[cc * 2 + 1]);
+}
+
+// Set with lazy: only allow set -1 so no val.
+fn update_set(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, l: usize, r: usize) {
+    if l > r {
+        return;
+    }
+    if ql == l && qr == r {
+        tree[cc].lz = true;
+        tree[cc].max_suf_sum = -1;
+        tree[cc].sum = -(qr as i64 - ql as i64 + 1);
+        return;
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if r <= mid {
+        update_set(tree, cc * 2, ql, mid, l, r);
+    } else if l > mid {
+        update_set(tree, cc * 2 + 1, mid + 1, qr, l, r);
+    } else {
+        update_set(tree, cc * 2, ql, mid, l, mid);
+        update_set(tree, cc * 2 + 1, mid + 1, qr, mid + 1, r);
+    }
+    tree[cc] = merge(tree[cc * 2], tree[cc * 2 + 1]);
+}
+
+fn tree_query(tree: &mut Vec<Node>, cc: usize, ql: usize, qr: usize, l: usize, r: usize) -> Node {
+    if ql == l && qr == r {
+        return tree[cc];
+    }
+    push(tree, cc, ql, qr);
+    let mid = (ql + qr) / 2;
+    if r <= mid {
+        return tree_query(tree, cc * 2, ql, mid, l, r);
+    } else if l > mid {
+        return tree_query(tree, cc * 2 + 1, mid + 1, qr, l, r);
+    } else {
+        let left_ans = tree_query(tree, cc * 2, ql, mid, l, mid);
+        let right_ans = tree_query(tree, cc * 2 + 1, mid + 1, qr, mid + 1, r);
+        return merge(left_ans, right_ans);
+    }
+}

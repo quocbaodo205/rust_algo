@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 
 use crate::segment_tree::{SegmentTreeLazy, SegtreeLazy, SegtreeValue, VID};
 
@@ -207,9 +207,11 @@ fn dfs_hld_label(
     children: &Vec<Vec<usize>>,
     tsize: &Vec<usize>,
     label: &mut Vec<usize>,
+    max_label: &mut Vec<usize>,
     global_label: &mut usize,
 ) {
     label[u] = *global_label;
+    max_label[u] = *global_label;
     *global_label += 1;
     // Find heavy vertex
     let mut hv_vertex: Option<usize> = None;
@@ -221,13 +223,15 @@ fn dfs_hld_label(
         }
     }
     if let Some(hv) = hv_vertex {
-        dfs_hld_label(hv, children, tsize, label, global_label);
+        dfs_hld_label(hv, children, tsize, label, max_label, global_label);
+        max_label[u] = max(max_label[u], max_label[hv]);
         // dfs for others
         for &v in children[u].iter() {
             if v == hv {
                 continue;
             }
-            dfs_hld_label(v, children, tsize, label, global_label);
+            dfs_hld_label(v, children, tsize, label, max_label, global_label);
+            max_label[u] = max(max_label[u], max_label[v]);
         }
     }
 }
@@ -260,6 +264,56 @@ fn dfs_hld_parent(
             parent[v] = v;
             dfs_hld_parent(v, children, tsize, parent);
         }
+    }
+}
+
+// Update a chain from parent to u
+// For edge: label[u] is for edge(u -> parent[u]).
+#[allow(dead_code)]
+fn update_hld_to_parent(
+    u: usize,
+    px: usize,
+    parent: &Vec<usize>,
+    hld_parent: &Vec<usize>,
+    label: &Vec<usize>,
+    level: &Vec<usize>,
+    st: &mut SegmentTreeLazy,
+    is_count_last: bool,
+    update_val: SegtreeLazy,
+) {
+    // println!("update hld from {u} to {px}");
+    let mut cur = u;
+    while cur != px {
+        // Explore the heavy chain
+        let hp = hld_parent[cur];
+        // println!("cur = {cur}, hp = {hp}");
+        if hp == cur {
+            // Current u -> p is a light edge, goes up light normal
+            st.update(label[cur], label[cur], update_val);
+            cur = parent[cur];
+        } else {
+            // Have a heavy chain:
+            if level[hp] >= level[px] {
+                // Deeper than px, can use full st[hp+1..=cur]
+                // Use the +1 to avoid counting for data[hp], it will cal in the next up edge.
+                st.update(label[hp] + 1, label[cur], update_val);
+                // println!(
+                //     "update from {} -> {}",
+                //     label[hp] + 1,
+                //     label[cur],
+                // );
+                cur = hp;
+            } else {
+                // Have to stop at px
+                let st_ans = st.update(label[px] + 1, label[cur], update_val);
+                cur = px;
+            }
+        }
+    }
+    // Consider the last edge: cur -> px:
+    if is_count_last {
+        let st_ans = st.update(label[px], label[px], update_val);
+        // println!("ans for {} is {:?}", label[px], st_ans);
     }
 }
 
@@ -379,9 +433,18 @@ fn hld() {
     dfs_tree_size(0, &children, &mut tsize);
 
     // DFS labeling: so that chain of heavy edges have concescutive label (for segment tree).
+    // Also get the max label of the subchild of v: useful to update the whole subtree at once!
     let mut label = vec![0; n];
-    let mut global_label = 1;
-    dfs_hld_label(0, &children, &tsize, &mut label, &mut global_label);
+    let mut max_label = vec![0; n];
+    let mut global_label = 0;
+    dfs_hld_label(
+        0,
+        &children,
+        &tsize,
+        &mut label,
+        &mut max_label,
+        &mut global_label,
+    );
 
     // DFS to find for a vertex, its longest hld chain parent.
     // All the way to the top until you hit a light edge
