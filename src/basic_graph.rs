@@ -1,19 +1,7 @@
 use std::{
-    cmp::Ordering,
     collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
     ops,
 };
-
-use crate::root_tree;
-
-#[allow(dead_code)]
-fn lower_bound_pos<T: Ord + PartialOrd>(a: &Vec<T>, search_value: T) -> usize {
-    a.binary_search_by(|e| match e.cmp(&search_value) {
-        Ordering::Equal => Ordering::Greater,
-        ord => ord,
-    })
-    .unwrap_err()
-}
 
 type V<T> = Vec<T>;
 type VV<T> = V<V<T>>;
@@ -24,105 +12,465 @@ type UU = (US, US);
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum CheckState {
+pub enum CheckState {
     NOTCHECK,
     CHECKING,
     CHECKED,
 }
 
-// ============================ basic =====================================
+use std::ops::Index;
 
-// Visual: https://visualgo.net/en/graphds
-
-// simple DFS
-#[allow(dead_code)]
-fn dfs_temp(u: US, g: &VV<US>, state: &mut V<CheckState>) {
-    state[u] = CheckState::CHECKED;
-    g[u].iter().for_each(|&v| {
-        if state[v] == CheckState::NOTCHECK {
-            dfs_temp(v, g, state);
-        }
-    });
+/// CSR 形式の二次元配列
+#[derive(Clone)]
+pub struct CSRArray<T> {
+    pos: Vec<usize>,
+    data: Vec<T>,
 }
 
-// simple BFS
-#[allow(dead_code)]
-fn bfs_temp(n: US) {
-    let mut g: VV<US> = vec![V::new(); n];
-    let mut state = vec![CheckState::NOTCHECK; n];
-
-    // main bfs part
-    let mut q: VecDeque<US> = VecDeque::new();
-
-    (0..n).for_each(|u| {
-        if state[u] == CheckState::NOTCHECK {
-            state[u] = CheckState::CHECKED;
-            q.push_back(u);
+impl<T: Clone> CSRArray<T> {
+    /// a の各要素 (i, x) について、 i 番目の配列に x が格納される
+    pub fn new(n: usize, a: &[(usize, T)]) -> Self {
+        let mut pos = vec![0; n + 1];
+        for &(i, _) in a {
+            pos[i] += 1;
         }
-        while let Some(u) = q.pop_front() {
-            g[u].iter().for_each(|&v| {
-                if state[v] == CheckState::NOTCHECK {
-                    state[v] = CheckState::CHECKED;
-                    q.push_back(v);
+        for i in 0..n {
+            pos[i + 1] += pos[i];
+        }
+        let mut ord = vec![0; a.len()];
+        for j in (0..a.len()).rev() {
+            let (i, _) = a[j];
+            pos[i] -= 1;
+            ord[pos[i]] = j;
+        }
+        let data = ord.into_iter().map(|i| a[i].1.clone()).collect();
+        Self { pos, data }
+    }
+}
+
+impl<T> CSRArray<T> {
+    pub fn len(&self) -> usize {
+        self.pos.len() - 1
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &[T]> {
+        (0..self.len()).map(|i| &self[i])
+    }
+}
+
+impl<T> Index<usize> for CSRArray<T> {
+    type Output = [T];
+    fn index(&self, i: usize) -> &Self::Output {
+        let start = self.pos[i];
+        let end = self.pos[i + 1];
+        &self.data[start..end]
+    }
+}
+
+/// 隣接リスト
+#[derive(Clone)]
+pub struct Graph<V, E, const DIRECTED: bool>
+where
+    V: Clone,
+    E: Clone,
+{
+    vertices: Vec<V>,
+    edges: CSRArray<(usize, E)>,
+}
+
+pub type DirectedGraph<V, E> = Graph<V, E, true>;
+pub type UndirectedGraph<V, E> = Graph<V, E, false>;
+
+/// グリッドグラフの 4 近傍  
+/// 上, 左, 下, 右
+pub const GRID_NEIGHBOURS_4: [(usize, usize); 4] = [(!0, 0), (0, !0), (1, 0), (0, 1)];
+
+/// グリッドグラフの 8 近傍  
+/// 上, 左, 下, 右, 左上, 左下, 右下, 右上
+pub const GRID_NEIGHBOURS_8: [(usize, usize); 8] = [
+    (!0, 0),
+    (0, !0),
+    (1, 0),
+    (0, 1),
+    (!0, !0),
+    (1, !0),
+    (1, 1),
+    (!0, 1),
+];
+
+impl<V, E> DirectedGraph<V, E>
+where
+    V: Clone,
+    E: Clone,
+{
+    /// 頂点重みと重み付き有向辺からグラフを構築する
+    pub fn from_vertices_and_edges(vertices: &[V], edges: &[(usize, usize, E)]) -> Self {
+        let edges = edges
+            .iter()
+            .map(|(u, v, w)| (*u, (*v, w.clone())))
+            .collect::<Vec<_>>();
+
+        Self {
+            vertices: vertices.to_vec(),
+            edges: CSRArray::new(vertices.len(), &edges),
+        }
+    }
+
+    /// グリッドからグラフを構築する
+    ///
+    /// # 引数
+    ///
+    /// * `grid` - グリッド
+    /// * `neighbours` - 近傍
+    /// * `cost` - grid の値から重みを計算する関数
+    pub fn from_grid(
+        grid: &Vec<Vec<V>>,
+        neighbours: &[(usize, usize)],
+        cost: impl Fn(&V, &V) -> Option<E>,
+    ) -> Self {
+        let h = grid.len();
+        let w = grid[0].len();
+        let mut edges = vec![];
+        for i in 0..h {
+            for j in 0..w {
+                for &(di, dj) in neighbours {
+                    let ni = i.wrapping_add(di);
+                    let nj = j.wrapping_add(dj);
+                    if ni >= h || nj >= w {
+                        continue;
+                    }
+                    if let Some(c) = cost(&grid[i][j], &grid[ni][nj]) {
+                        edges.push((i * w + j, ni * w + nj, c));
+                    }
                 }
-            });
+            }
         }
-    });
+        Self::from_vertices_and_edges(
+            &grid.into_iter().flatten().cloned().collect::<Vec<_>>(),
+            &edges,
+        )
+    }
+}
+
+impl<V, E> UndirectedGraph<V, E>
+where
+    V: Clone,
+    E: Clone,
+{
+    /// 頂点重みと重み付き無向辺からグラフを構築する
+    pub fn from_vertices_and_edges(vertices: &[V], edges: &[(usize, usize, E)]) -> Self {
+        let edges = edges
+            .iter()
+            .map(|(u, v, w)| [(*u, (*v, w.clone())), (*v, (*u, w.clone()))])
+            .flatten()
+            .collect::<Vec<_>>();
+
+        Self {
+            vertices: vertices.to_vec(),
+            edges: CSRArray::new(vertices.len(), &edges),
+        }
+    }
+
+    /// グリッドからグラフを構築する
+    ///
+    /// # 引数
+    ///
+    /// * `grid` - グリッド
+    /// * `neighbours` - 近傍
+    /// * `cost` - grid の値から重みを計算する関数
+    pub fn from_grid(
+        grid: &Vec<Vec<V>>,
+        neighbours: &[(usize, usize)],
+        cost: impl Fn(&V, &V) -> Option<E>,
+    ) -> Self {
+        let h = grid.len();
+        let w = grid[0].len();
+        let mut edges = vec![];
+        for i in 0..h {
+            for j in 0..w {
+                for &(di, dj) in neighbours {
+                    let ni = i.wrapping_add(di);
+                    let nj = j.wrapping_add(dj);
+                    if ni >= h || nj >= w {
+                        continue;
+                    }
+                    let u = i * w + j;
+                    let v = ni * w + nj;
+                    if u > v {
+                        continue;
+                    }
+                    if let Some(c) = cost(&grid[i][j], &grid[ni][nj]) {
+                        edges.push((u, v, c));
+                    }
+                }
+            }
+        }
+        Self::from_vertices_and_edges(
+            &grid.into_iter().flatten().cloned().collect::<Vec<_>>(),
+            &edges,
+        )
+    }
+}
+
+impl<V, E, const DIRECTED: bool> Graph<V, E, DIRECTED>
+where
+    V: Clone,
+    E: Clone,
+{
+    /// 頂点数を返す
+    pub fn len(&self) -> usize {
+        self.vertices.len()
+    }
+
+    /// 頂点重みを返す
+    pub fn vertex(&self, v: usize) -> &V {
+        &self.vertices[v]
+    }
+
+    /// 頂点 v から出る辺を返す  
+    /// g\[v\] と同じ
+    pub fn edges(&self, v: usize) -> &[(usize, E)] {
+        &self.edges[v]
+    }
+}
+
+impl<V, E, const DIRECTED: bool> Index<usize> for Graph<V, E, DIRECTED>
+where
+    V: Clone,
+    E: Clone,
+{
+    type Output = [(usize, E)];
+
+    fn index(&self, v: usize) -> &[(usize, E)] {
+        self.edges(v)
+    }
+}
+
+impl<V> DirectedGraph<V, ()>
+where
+    V: Clone,
+{
+    /// 頂点重みと重みなし有向辺からグラフを構築する
+    pub fn from_vertices_and_unweighted_edges(vertices: &[V], edges: &[(usize, usize)]) -> Self {
+        Self::from_vertices_and_edges(
+            vertices,
+            &edges.iter().map(|&(u, v)| (u, v, ())).collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl<V> UndirectedGraph<V, ()>
+where
+    V: Clone,
+{
+    /// 頂点重みと重みなし無向辺からグラフを構築する
+    pub fn from_vertices_and_unweighted_edges(vertices: &[V], edges: &[(usize, usize)]) -> Self {
+        Self::from_vertices_and_edges(
+            vertices,
+            &edges.iter().map(|&(u, v)| (u, v, ())).collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl<E> DirectedGraph<(), E>
+where
+    E: Clone,
+{
+    /// 重み付き有向辺からグラフを構築する
+    pub fn from_edges(n: usize, edges: &[(usize, usize, E)]) -> Self {
+        Self::from_vertices_and_edges(&vec![(); n], edges)
+    }
+}
+
+impl<E> UndirectedGraph<(), E>
+where
+    E: Clone,
+{
+    /// 重み付き無向辺からグラフを構築する
+    pub fn from_edges(n: usize, edges: &[(usize, usize, E)]) -> Self {
+        Self::from_vertices_and_edges(&vec![(); n], edges)
+    }
+}
+
+impl DirectedGraph<(), ()> {
+    /// 重みなし有向辺からグラフを構築する
+    pub fn from_unweighted_edges(n: usize, edges: &[(usize, usize)]) -> Self {
+        Self::from_edges(
+            n,
+            &edges.iter().map(|&(u, v)| (u, v, ())).collect::<Vec<_>>(),
+        )
+    }
+}
+
+impl UndirectedGraph<(), ()> {
+    /// 重みなし無向辺からグラフを構築する
+    pub fn from_unweighted_edges(n: usize, edges: &[(usize, usize)]) -> Self {
+        Self::from_edges(
+            n,
+            &edges.iter().map(|&(u, v)| (u, v, ())).collect::<Vec<_>>(),
+        )
+    }
 }
 
 // ============================ shortest path =====================================
 
-// simple BFS
-#[allow(dead_code)]
-fn bfs_shpath(n: US) {
-    let mut g: VV<US> = vec![V::new(); n];
-    let mut d = vec![1000000009; n];
+pub struct ZeroOneBFSResult<T>
+where
+    T: Clone + Ord + Add<Output = T> + Default,
+{
+    pub dist: Vec<T>,
+    pub prev: Vec<usize>,
+}
 
-    // Init some d[u] = 0 and push to Q
-    let mut q: VecDeque<US> = VecDeque::new();
-    (0..n).for_each(|u| {
-        if d[u] == 0 {
-            q.push_back(u);
+/// 0-1 BFS  
+/// 辺の重みが 0 か 1 のグラフ上で、始点から各頂点への最短距離を求める
+///
+/// # 戻り値
+///
+/// ZeroOneBFSResult
+/// - dist: 始点から各頂点への最短距離
+/// - prev: 始点から各頂点への最短経路における前の頂点
+pub fn zero_one_bfs<V, T, const DIRECTED: bool>(
+    g: &Graph<V, T, DIRECTED>,
+    starts: &[usize],
+    inf: T,
+) -> ZeroOneBFSResult<T>
+where
+    V: Clone,
+    T: Clone + Ord + Add<Output = T> + Default + From<u8>,
+{
+    assert!(starts.len() > 0);
+    let zero = T::from(0);
+    let one = T::from(1);
+    let mut dist = vec![inf.clone(); g.len()];
+    let mut prev = vec![!0; g.len()];
+    let mut dq = VecDeque::new();
+    for &s in starts {
+        dist[s] = T::default();
+        dq.push_back((zero.clone(), s));
+    }
+    while let Some((s, v)) = dq.pop_front() {
+        if dist[v] < s {
+            continue;
         }
-    });
-
-    while let Some(u) = q.pop_front() {
-        g[u].iter().for_each(|&v| {
-            if d[v] > d[u] + 1 {
-                d[v] = d[u] + 1;
-                q.push_back(v);
+        for (u, w) in &g[v] {
+            assert!(*w == zero || *w == one);
+            let t = dist[v].clone() + w.clone();
+            if dist[*u] > t {
+                dist[*u] = t.clone();
+                prev[*u] = v;
+                if *w == zero {
+                    dq.push_front((t.clone(), *u));
+                } else {
+                    dq.push_back((t.clone(), *u));
+                }
             }
-        });
+        }
+    }
+    ZeroOneBFSResult { dist, prev }
+}
+
+impl<T> ZeroOneBFSResult<T>
+where
+    T: Clone + Ord + Add<Output = T> + Default,
+{
+    /// 始点から頂点 v への最短経路を求める  
+    /// 経路が存在しない場合は None を返す
+    pub fn path(&self, mut v: usize) -> Option<Vec<usize>> {
+        if self.dist[v].clone() != T::default() && self.prev[v] == !0 {
+            return None;
+        }
+        let mut path = vec![];
+        while v != !0 {
+            path.push(v);
+            v = self.prev[v];
+        }
+        path.reverse();
+        Some(path)
     }
 }
 
-#[allow(dead_code)]
-fn dijkstra(n: US) {
-    let mut g: VV<UU> = vec![V::new(); n];
-    let mut d = vec![1000000009; n];
+use std::{cmp::Reverse, collections::BinaryHeap, ops::Add};
 
-    // Init some d[u] = 0 and push to Q
-    let mut q: Set<UU> = (0..n).map(|u| (d[u], u)).collect();
+pub struct DijkstraResult<T>
+where
+    T: Clone + Ord + Add<Output = T> + Default,
+{
+    pub dist: Vec<T>,
+    pub prev: Vec<usize>,
+}
 
-    while let Some((du, u)) = q.pop_first() {
-        g[u].iter().for_each(|&(v, w)| {
-            if d[v] > du + w {
-                q.remove(&(d[v], v));
-                d[v] = du + w;
-                q.insert((d[v], v));
+/// ダイクストラ法  
+/// 始点集合からの最短距離を求める。
+pub fn dijkstra<V, T, const DIRECTED: bool>(
+    g: &Graph<V, T, DIRECTED>,
+    starts: &[usize],
+    inf: T,
+) -> DijkstraResult<T>
+where
+    V: Clone,
+    T: Clone + Ord + Add<Output = T> + Default,
+{
+    assert!(starts.len() > 0);
+    let mut dist = vec![inf.clone(); g.len()];
+    let mut prev = vec![!0; g.len()];
+    let mut pq = BinaryHeap::new();
+    for &s in starts {
+        dist[s] = T::default();
+        pq.push(Reverse((T::default(), s)));
+    }
+    while let Some(Reverse((s, v))) = pq.pop() {
+        if dist[v] < s {
+            continue;
+        }
+        for (u, w) in &g[v] {
+            assert!(w.clone() >= T::default());
+            if dist[*u] > dist[v].clone() + w.clone() {
+                dist[*u] = dist[v].clone() + w.clone();
+                prev[*u] = v;
+                pq.push(Reverse((dist[*u].clone(), *u)));
             }
-        });
+        }
+    }
+    DijkstraResult { dist, prev }
+}
+
+impl<T> DijkstraResult<T>
+where
+    T: Clone + Ord + Add<Output = T> + Default,
+{
+    /// 終点 v までの最短経路を求める。
+    /// 終点に到達できない場合は None を返す。
+    pub fn path(&self, mut v: usize) -> Option<Vec<usize>> {
+        if self.dist[v].clone() != T::default() && self.prev[v] == !0 {
+            return None;
+        }
+        let mut path = vec![];
+        while v != !0 {
+            path.push(v);
+            v = self.prev[v];
+        }
+        path.reverse();
+        Some(path)
     }
 }
 
 // ============================ topo sort =====================================
 
 #[allow(dead_code)]
-fn dfs_has_cycle(u: US, g: &VV<US>, state: &mut V<CheckState>) -> bool {
+fn dfs_has_cycle<V, T, const DIRECTED: bool>(
+    u: US,
+    g: &Graph<V, T, DIRECTED>,
+    state: &mut Vec<CheckState>,
+) -> bool
+where
+    V: Clone,
+    T: Clone + Ord + Add<Output = T> + Default + From<u8>,
+{
     state[u] = CheckState::CHECKING;
-    for &v in g[u].iter() {
-        let has_cycle_v = match state[v] {
-            CheckState::NOTCHECK => dfs_has_cycle(v, g, state),
+    for (v, _) in &g[u] {
+        let has_cycle_v = match state[*v] {
+            CheckState::NOTCHECK => dfs_has_cycle(*v, g, state),
             CheckState::CHECKING => true,
             CheckState::CHECKED => false,
         };
@@ -135,19 +483,34 @@ fn dfs_has_cycle(u: US, g: &VV<US>, state: &mut V<CheckState>) -> bool {
 }
 
 #[allow(dead_code)]
-fn dfs_topo(u: US, g: &VV<US>, state: &mut V<CheckState>, ts: &mut V<US>) {
+fn dfs_topo<V, T, const DIRECTED: bool>(
+    u: US,
+    g: &Graph<V, T, DIRECTED>,
+    state: &mut Vec<CheckState>,
+    ts: &mut Vec<US>,
+) where
+    V: Clone,
+    T: Clone + Ord + Add<Output = T> + Default + From<u8>,
+{
     state[u] = CheckState::CHECKED;
-    g[u].iter().for_each(|&v| {
-        if state[v] == CheckState::NOTCHECK {
-            dfs_topo(v, g, state, ts);
+    for (v, _) in &g[u] {
+        if state[*v] == CheckState::NOTCHECK {
+            dfs_topo(*v, g, state, ts);
         }
-    });
+    }
     ts.push(u);
 }
 
 #[allow(dead_code)]
-fn find_topo(g: &VV<US>, state: &mut V<CheckState>) -> V<US> {
-    let mut ts: V<US> = V::new();
+fn find_topo<V, T, const DIRECTED: bool>(
+    g: &Graph<V, T, DIRECTED>,
+    state: &mut Vec<CheckState>,
+) -> Vec<US>
+where
+    V: Clone,
+    T: Clone + Ord + Add<Output = T> + Default + From<u8>,
+{
+    let mut ts: Vec<US> = Vec::new();
     (0..state.len()).for_each(|u| {
         if state[u] == CheckState::NOTCHECK {
             dfs_topo(u, g, state, &mut ts)
@@ -155,236 +518,6 @@ fn find_topo(g: &VV<US>, state: &mut V<CheckState>) -> V<US> {
     });
     ts.reverse();
     ts
-}
-
-// ============================ dfs tree magic =========================
-
-// Find the list of span edge, these edges form a spanning tree.
-// All other edges are called back edges, the back edge always point from u to it's sub tree.
-#[allow(dead_code)]
-fn dfs_tree(
-    u: US,
-    p: US,
-    g: &VV<US>,
-    state: &mut V<CheckState>,
-    span_edges: &mut V<UU>,
-    back_edges: &mut V<UU>,
-) {
-    state[u] = CheckState::CHECKED;
-    for &v in g[u].iter() {
-        if v == p {
-            continue;
-        }
-        if state[v] != CheckState::CHECKED {
-            span_edges.push((u, v));
-            dfs_tree(v, u, g, state, span_edges, back_edges);
-        } else {
-            back_edges.push((u, v));
-        }
-    }
-}
-
-// A span-edge (u,v) can be a bridge, if no back-edge connect ancestor of (u,v) to decendant of (u,v).
-// Assume u is parent of v (in dfs tree), that means no back-edge from ancestors(u) connect to subchildren(v)
-// Also a template for other stuff, so it's kinda messy right now.
-#[allow(dead_code)]
-fn find_bridges() {
-    let n = 10;
-    let mut g: VV<US> = vec![V::new(); n];
-    let mut state = vec![CheckState::NOTCHECK; n];
-    // Graph could be un-connected.
-    for st in 0..n {
-        if state[st] == CheckState::CHECKED {
-            continue;
-        }
-        let mut span_edges: V<UU> = V::new();
-        let mut back_edges: V<UU> = V::new();
-        dfs_tree(0, 0, &g, &mut state, &mut span_edges, &mut back_edges);
-        // Turn it into a tree structure with parent and shit (very often use!!)
-        // Get a list of explored vertex and compress them.
-        let mut unique_val: Set<US> = Set::new();
-        for &(u, v) in span_edges.iter() {
-            unique_val.insert(u);
-            unique_val.insert(v);
-        }
-        for &(u, v) in back_edges.iter() {
-            unique_val.insert(u);
-            unique_val.insert(v);
-        }
-        let unique_val_arr: V<US> = unique_val.iter().cloned().collect();
-        let nn = unique_val_arr.len();
-        if nn == 0 {
-            // No value, no edge, nothing to do!
-            continue;
-        }
-        let span_edges: V<UU> = span_edges
-            .iter()
-            .map(|&(u, v)| {
-                (
-                    lower_bound_pos(&unique_val_arr, u),
-                    lower_bound_pos(&unique_val_arr, v),
-                )
-            })
-            .collect();
-        let back_edges: V<UU> = back_edges
-            .iter()
-            .map(|&(u, v)| {
-                (
-                    lower_bound_pos(&unique_val_arr, u),
-                    lower_bound_pos(&unique_val_arr, v),
-                )
-            })
-            .collect();
-
-        let st = lower_bound_pos(&unique_val_arr, st);
-        let mut gp: VV<US> = vec![V::new(); nn];
-        for &(u, v) in span_edges.iter() {
-            gp[u].push(v);
-            gp[v].push(u);
-        }
-        let mut parent = vec![0; nn];
-        let mut children: VV<US> = vec![Vec::new(); nn];
-        let mut level = vec![0; nn];
-        let mut time_in = vec![0; nn];
-        let mut time_out = vec![0; nn];
-        let mut global_time = 1;
-        let lg = (nn as f32).log2() as usize;
-        let mut up: VV<US> = vec![vec![0; lg + 1]; nn];
-        root_tree::dfs_root(
-            st,
-            st,
-            0,
-            &gp,
-            &mut parent,
-            &mut children,
-            &mut level,
-            &mut time_in,
-            &mut time_out,
-            &mut global_time,
-            &mut up,
-            lg,
-        );
-        // Fix the back edge list, since they also contain duplicates.
-        let mut back_edges: V<UU> = back_edges
-            .iter()
-            .cloned()
-            .filter(|&(u, v)| level[u] < level[v])
-            .collect();
-        println!("span edges: {span_edges:?}");
-        // Back edges are sorted by level of u,
-        // So when exploring other chain with lower level start, we can be sure that the previous chain is already explored.
-        back_edges.sort_by_key(|(u, _)| level[*u]);
-        println!("back edges: {back_edges:?}");
-        // Group back edges by start and end (very useful, but not used in this func)
-        let mut be_start: VV<US> = vec![V::new(); nn];
-        let mut be_end: VV<US> = vec![V::new(); nn];
-        for &(u, v) in back_edges.iter() {
-            be_start[u].push(v);
-            be_end[v].push(u);
-        }
-
-        // Turn gp into a V<Set>, useful for deleting
-        let mut gp: V<Set<US>> = vec![Set::new(); nn];
-        for &(u, v) in span_edges.iter() {
-            gp[u].insert(v);
-            gp[v].insert(u);
-        }
-        // iterate from bottom to top, considering #children and #be_end[u] (useful as hell!)
-        let mut cd: V<US> = (0..nn).collect();
-        cd.sort_by_key(|&x| level[x]);
-        cd.reverse();
-        for &u in cd.iter() {}
-
-        // ============================= End of all useful stuff =============================
-
-        // Start finding bridges via impossible span edges:
-        let mut impossible_span_edge: Set<UU> = Set::new();
-        for &(u, v) in back_edges.iter() {
-            // For each back-edge (x,y), goes from y upward, each generate and edge (x',y').
-            // obviously (x',y') can't be a bridge. Mark it as unable.
-            let mut cur = v;
-            while parent[cur] != u {
-                let p = parent[cur];
-                if impossible_span_edge.contains(&(p, cur)) {
-                    // This chain is already explored before, no need to go further!
-                    break;
-                }
-                impossible_span_edge.insert((p, cur));
-                cur = p;
-            }
-            // last edge: cur -> u
-            if parent[cur] != cur {
-                impossible_span_edge.insert((parent[cur], cur));
-            }
-        }
-        println!("impossible span edge: {impossible_span_edge:?}");
-        for &(u, v) in span_edges.iter() {
-            if !impossible_span_edge.contains(&(u, v)) {
-                println!(
-                    "{}, {} is a possible bridge",
-                    unique_val_arr[u], unique_val_arr[v]
-                );
-            }
-        }
-    }
-}
-
-// dfs tree for directed graph
-// can split into 3 types: span-edges, back-edges and cross-edges.
-// Cross edges always direct from vertex that was explore later
-// to vertex that was explore earlier.
-#[allow(dead_code)]
-fn find_dfs_tree_directed(g: &VV<US>, state: &mut V<CheckState>) {
-    let n = g.len();
-    // Assume connected graph, find dfs tree at 0
-    let mut span_edges: V<UU> = V::new();
-    let mut back_edges: V<UU> = V::new();
-    dfs_tree(0, 0, g, state, &mut span_edges, &mut back_edges);
-    // Turn it into a tree structure with parent and shit (very often use!!)
-    let mut gp: VV<US> = vec![V::new(); n];
-    for &(u, v) in span_edges.iter() {
-        gp[u].push(v);
-    }
-    let mut parent = vec![0; n];
-    let mut children: VV<US> = vec![Vec::new(); n];
-    let mut level = vec![0; n];
-    let mut time_in = vec![0; n];
-    let mut time_out = vec![0; n];
-    let mut global_time = 0;
-    let lg = (n as f32).log2() as usize;
-    let mut up: VV<US> = vec![vec![0; lg + 1]; n];
-    root_tree::dfs_root(
-        0,
-        0,
-        0,
-        &gp,
-        &mut parent,
-        &mut children,
-        &mut level,
-        &mut time_in,
-        &mut time_out,
-        &mut global_time,
-        &mut up,
-        lg,
-    );
-    // Start dividing back-edges into cross-edges
-    let mut cross_edges: V<UU> = back_edges
-        .iter()
-        .cloned()
-        .filter(|&(u, v)| {
-            !(root_tree::is_parent(u, v, &time_in, &time_out)
-                || root_tree::is_parent(v, u, &time_in, &time_out))
-        })
-        .collect();
-    // True back edge: In the same subtree
-    let mut back_edges: V<UU> = back_edges
-        .iter()
-        .cloned()
-        .filter(|&(u, v)| {
-            root_tree::is_parent(u, v, &time_in, &time_out)
-                || root_tree::is_parent(v, u, &time_in, &time_out)
-        })
-        .collect();
 }
 
 // ============================ 2d =====================================
