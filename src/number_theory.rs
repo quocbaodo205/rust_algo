@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 #[allow(dead_code)]
 // List primes <= n
-fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
+pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     let mut lp: Vec<usize> = vec![0; n + 1];
     let mut pr: Vec<usize> = Vec::new();
     let mut idx: Vec<usize> = vec![0; n + 1];
@@ -34,7 +34,7 @@ fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
 }
 
 #[allow(dead_code)]
-fn prime_list(a: usize, lp: &Vec<usize>) -> Vec<usize> {
+pub fn prime_list(a: usize, lp: &Vec<usize>) -> Vec<usize> {
     let mut x = a;
     let mut f: Vec<usize> = Vec::new();
     if lp[x] == x {
@@ -53,7 +53,7 @@ fn prime_list(a: usize, lp: &Vec<usize>) -> Vec<usize> {
 }
 
 #[allow(dead_code)]
-fn prime_factorize(x: usize, lp: &Vec<usize>) -> Vec<(usize, usize)> {
+pub fn prime_factorize(x: usize, lp: &Vec<usize>) -> Vec<(usize, usize)> {
     let mut ans: Vec<(usize, usize)> = Vec::new();
 
     let mut x = x;
