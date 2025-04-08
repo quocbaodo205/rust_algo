@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 # formal-power-series = { path = "../cprs/crates/polynomial/formal-power-series" }
-modint = { path = "../cprs/crates/number-theory/modint" }
-combination = { path = "../cprs/crates/number-theory/combination" }
+static_modint = { path = "../cprs/crates/number_theory/modint/static_modint" }
+binomial = { path = "../cprs/crates/combinatorics/binomial" }
 # proconio = "0.5.0"

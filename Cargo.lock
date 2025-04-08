@@ -3,27 +3,59 @@
 version = 4
 
 [[package]]
-name = "algebraic"
-version = "0.1.0"
-
-[[package]]
-name = "combination"
+name = "barrett_reduction"
 version = "0.1.0"
 dependencies = [
  "modint",
+ "numeric_traits",
+]
+
+[[package]]
+name = "binomial"
+version = "0.1.0"
+dependencies = [
+ "modint",
+ "numeric_traits",
+ "prime_factorization",
 ]
 
 [[package]]
 name = "cp_rust"
 version = "0.1.0"
 dependencies = [
- "combination",
+ "binomial",
+ "static_modint",
+]
+
+[[package]]
+name = "dynamic_modint_64"
+version = "0.1.0"
+dependencies = [
+ "barrett_reduction",
  "modint",
+ "numeric_traits",
 ]
 
 [[package]]
 name = "modint"
 version = "0.1.0"
+
+[[package]]
+name = "numeric_traits"
+version = "0.1.0"
+
+[[package]]
+name = "prime_factorization"
+version = "0.1.0"
 dependencies = [
- "algebraic",
+ "dynamic_modint_64",
+ "numeric_traits",
+]
+
+[[package]]
+name = "static_modint"
+version = "0.1.0"
+dependencies = [
+ "modint",
+ "numeric_traits",
 ]
