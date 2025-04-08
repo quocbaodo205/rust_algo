@@ -8,8 +8,8 @@ use std::{
 // pub mod root_tree;
 // pub mod number_theory;
 // use basic_graph::Graph;
-// use combination::Combination;
-// use modint::ModInt998244353 as Mint;
+// use binomial::BinomialPrime;
+// use static_modint::ModInt998244353 as Mint;
 pub mod utils;
 
 type VV<T> = Vec<Vec<T>>;
@@ -17,7 +17,7 @@ type US = usize;
 
 fn solve(reader: &mut BufReader<Stdin>, line: &mut String, out: &mut BufWriter<StdoutLock>) {
     let default = 0usize;
-    let t = utils::read_1_number(line, reader, 0);
+    let t = utils::read_1_number(line, reader, default);
     (0..t).for_each(|_te| {});
 }
 
