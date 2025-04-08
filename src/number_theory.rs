@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-#[allow(dead_code)]
 // List primes <= n
 pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     let mut lp: Vec<usize> = vec![0; n + 1];
@@ -33,45 +32,90 @@ pub fn linear_sieve(n: usize) -> (Vec<usize>, Vec<usize>, Vec<usize>) {
     (lp, pr, idx)
 }
 
-#[allow(dead_code)]
-pub fn prime_list(a: usize, lp: &Vec<usize>) -> Vec<usize> {
+pub fn is_prime(n: usize, lp: &Vec<usize>, pr: &Vec<usize>) -> bool {
+    if n < lp.len() {
+        return lp[n] == n;
+    }
+    let r = (n as f64).sqrt() as usize;
+    for &p in pr.iter() {
+        if n % p == 0 {
+            return false;
+        }
+        if p >= r {
+            break;
+        }
+    }
+    true
+}
+
+pub fn prime_list(a: usize, lp: &Vec<usize>, pr: &Vec<usize>) -> Vec<usize> {
     let mut x = a;
     let mut f: Vec<usize> = Vec::new();
-    if lp[x] == x {
-        // Is a prime number
-        f.push(x);
-    } else {
-        while x > 1 {
-            let q = lp[x];
-            f.push(q);
-            while x % q == 0 {
-                x /= q;
+    let mut pr_idx = 0;
+    while x > 1 {
+        let q = {
+            if x < lp.len() {
+                lp[x]
+            } else {
+                let r = (x as f32).sqrt() as usize;
+                while x % pr[pr_idx] != 0 {
+                    pr_idx += 1;
+                    if pr[pr_idx] >= r {
+                        // Is a prime number
+                        break;
+                    }
+                }
+                if pr[pr_idx] >= r {
+                    x
+                } else {
+                    pr[pr_idx]
+                }
             }
+        };
+        f.push(q);
+        while x % q == 0 {
+            x /= q;
         }
     }
     f
 }
 
-#[allow(dead_code)]
-pub fn prime_factorize(x: usize, lp: &Vec<usize>) -> Vec<(usize, usize)> {
+pub fn prime_factorize(a: usize, lp: &Vec<usize>, pr: &Vec<usize>) -> Vec<(usize, usize)> {
     let mut ans: Vec<(usize, usize)> = Vec::new();
-
-    let mut x = x;
+    let mut x = a;
+    let mut pr_idx = 0;
     while x > 1 {
-        let k = lp[x];
+        let q = {
+            if x < lp.len() {
+                lp[x]
+            } else {
+                let r = (x as f32).sqrt() as usize;
+                while x % pr[pr_idx] != 0 {
+                    pr_idx += 1;
+                    if pr[pr_idx] >= r {
+                        // Is a prime number
+                        break;
+                    }
+                }
+                if pr[pr_idx] >= r {
+                    x
+                } else {
+                    pr[pr_idx]
+                }
+            }
+        };
         let mut count = 0;
-        while x % k == 0 {
-            x /= k;
+        while x % q == 0 {
+            x /= q;
             count += 1;
         }
-        ans.push((k, count));
+        ans.push((q, count));
     }
 
     ans
 }
 
-#[allow(dead_code)]
-fn mobius(n: usize) -> Vec<i8> {
+pub fn mobius(n: usize) -> Vec<i8> {
     let mut is_composite: Vec<bool> = vec![false; n + 1];
     let mut pr: Vec<usize> = Vec::new();
     let mut mu: Vec<i8> = vec![0; n + 1];
@@ -96,29 +140,89 @@ fn mobius(n: usize) -> Vec<i8> {
     mu
 }
 
-#[allow(dead_code)]
+pub fn big_mobius(n: usize, mu: &Vec<i8>, lp: &Vec<usize>, pr: &Vec<usize>) -> i8 {
+    if n < mu.len() {
+        return mu[n];
+    }
+    if is_prime(n, lp, pr) {
+        return -1;
+    }
+    let mut ans = 1;
+    let mut x = n;
+    let r = (n as f32).sqrt() as usize;
+    for &p in pr.iter() {
+        if p > r {
+            break;
+        }
+        let mut k = 1;
+        while x % p == 0 {
+            x /= p;
+            k *= p;
+            if mu[k] == 0 {
+                return 0;
+            }
+        }
+        ans *= mu[k];
+        if x < mu.len() {
+            return ans * mu[x];
+        }
+    }
+    // If not returned, last part has to be a prime with mu[p] = -1.
+    ans * -1
+}
+
 // To be used with the mobius function,
-// so only care p1*p2,... not p1^2, p1^3... since modibus(d) = 0 anyway.
-fn factors_mu(a: usize, lp: &Vec<usize>) -> Vec<usize> {
+// so only care p1*p2,... not p1^2, p1^3... since mobius(d) = 0 anyway.
+// mu[x in factors_mu] is the Inclusion-Exclusion of all prime factor of a.
+pub fn factors_mu(a: usize, lp: &Vec<usize>, pr: &Vec<usize>) -> Vec<usize> {
     let mut x = a;
     let mut f: Vec<usize> = Vec::new();
     f.push(1);
-    if lp[x] == x {
-        // Is a prime number
-        f.push(x);
-    } else {
-        while x > 1 {
-            let q = lp[x];
-            while x % q == 0 {
-                x /= q;
+    let mut pr_idx = 0;
+    while x > 1 {
+        let q = {
+            if x < lp.len() {
+                lp[x]
+            } else {
+                let r = (x as f32).sqrt() as usize;
+                while x % pr[pr_idx] != 0 {
+                    pr_idx += 1;
+                    if pr[pr_idx] >= r {
+                        // Is a prime number
+                        break;
+                    }
+                }
+                if pr[pr_idx] >= r {
+                    x
+                } else {
+                    pr[pr_idx]
+                }
             }
-            let len = f.len();
-            (0..len).for_each(|i| {
-                f.push(f[i] * q);
-            });
+        };
+        while x % q == 0 {
+            x /= q;
         }
+        let len = f.len();
+        (0..len).for_each(|i| {
+            f.push(f[i] * q);
+        });
     }
     f
+}
+
+pub fn divisors(n: usize) -> Vec<usize> {
+    let mut res = Vec::new();
+    let r = (n as f32).sqrt() as usize;
+    for d in 1..=r {
+        if n % d == 0 {
+            res.push(d);
+            if n / d != d {
+                res.push(n / d);
+            }
+        }
+    }
+    res.sort();
+    res
 }
 
 fn power(a: u64, b: u64, m: u64) -> u64 {

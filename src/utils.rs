@@ -406,6 +406,16 @@ pub fn read_n_and_array<T: FromStr + Copy>(
     (n, v)
 }
 
+pub fn read_n_m_and_array<T: FromStr + Copy>(
+    line: &mut String,
+    reader: &mut BufReader<Stdin>,
+    default: T,
+) -> (US, US, V<T>) {
+    let (n, m) = read_2_number(line, reader, 0usize);
+    let v = read_vec_template(line, reader, default);
+    (n, m, v)
+}
+
 pub fn read_n_and_array_of_pair<T: FromStr + Copy>(
     line: &mut String,
     reader: &mut BufReader<Stdin>,
