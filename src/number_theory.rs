@@ -140,12 +140,9 @@ pub fn mobius(n: usize) -> Vec<i8> {
     mu
 }
 
-pub fn big_mobius(n: usize, mu: &Vec<i8>, lp: &Vec<usize>, pr: &Vec<usize>) -> i8 {
+pub fn big_mobius(n: usize, mu: &Vec<i8>, pr: &Vec<usize>) -> i8 {
     if n < mu.len() {
         return mu[n];
-    }
-    if is_prime(n, lp, pr) {
-        return -1;
     }
     let mut ans = 1;
     let mut x = n;
