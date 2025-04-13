@@ -464,69 +464,14 @@ pub fn read_n_m_k_and_2_array<T: FromStr + Copy>(
     (n, m, k, a, b)
 }
 
-pub fn read_graph_from_edge_list(
-    g: &mut VV<US>,
-    m: US,
-    is_bidirectional: bool,
-    line: &mut String,
-    reader: &mut BufReader<Stdin>,
-) {
+pub fn read_edge_list(m: usize, line: &mut String, reader: &mut BufReader<Stdin>) -> V<(UU)> {
+    let mut el: V<UU> = V::new();
+    el.reserve(m);
     (0..m).for_each(|_| {
         let (u, v) = read_2_number(line, reader, 0usize);
-        let (u, v) = (u - 1, v - 1);
-        g[u].push(v);
-        if is_bidirectional {
-            g[v].push(u);
-        }
+        el.push((u - 1, v - 1));
     });
-}
-
-pub fn read_graph_from_edge_list_keep(
-    g: &mut VV<UU>,
-    m: US,
-    is_bidirectional: bool,
-    line: &mut String,
-    reader: &mut BufReader<Stdin>,
-) {
-    (0..m).for_each(|idx| {
-        let (u, v) = read_2_number(line, reader, 0usize);
-        let (u, v) = (u - 1, v - 1);
-        g[u].push((v, idx));
-        if is_bidirectional {
-            g[v].push((u, idx));
-        }
-    });
-}
-
-pub fn read_edge_list_with_weight(
-    m: US,
-    line: &mut String,
-    reader: &mut BufReader<Stdin>,
-) -> V<(US, US, US)> {
-    let mut edges: V<(US, US, US)> = V::new();
-    edges.reserve(m);
-    (0..m).for_each(|_| {
-        let (u, v, w) = read_3_number(line, reader, 0usize);
-        let (u, v) = (u - 1, v - 1);
-        edges.push((w, u, v));
-    });
-    edges
-}
-
-pub fn read_tree_parent_list(
-    g: &mut VV<US>,
-    n: US,
-    line: &mut String,
-    reader: &mut BufReader<Stdin>,
-) {
-    // Rooted tree at 0, parent of [1..n-1]
-    let parent = read_vec_template(line, reader, 0usize);
-    // p1, p2, ..., pn-1
-    // there's edge between i and (p[i] - 1)
-    (0..n - 1).for_each(|i| {
-        g[parent[i] - 1].push(i + 1);
-        g[i + 1].push(parent[i] - 1);
-    });
+    el
 }
 
 pub fn array_output<T>(a: &V<T>, out: &mut BufWriter<Stdout>)

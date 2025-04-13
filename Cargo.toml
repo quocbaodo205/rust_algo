@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# formal-power-series = { path = "../cprs/crates/polynomial/formal-power-series" }
+# numeric_traits = { path = "../cprs/crates/algebra/numeric_traits" }
+# formal_power_series = { path = "../cprs/crates/polynomial/formal_power_series" }
 # static_modint = { path = "../cprs/crates/number_theory/modint/static_modint" }
 # binomial = { path = "../cprs/crates/combinatorics/binomial" }
 # proconio = "0.5.0"

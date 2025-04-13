@@ -155,7 +155,7 @@ pub fn get_path_lca(
 
 // ======================== Technical analysis ==============================
 
-// ================== Counter ====================
+// ================== Utils ====================
 pub fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize>) -> usize {
     tsize[u] = 1;
     children[u].iter().for_each(|&v| {
@@ -163,6 +163,21 @@ pub fn dfs_tree_size(u: usize, children: &Vec<Vec<usize>>, tsize: &mut Vec<usize
     });
     tsize[u]
 }
+
+pub fn dfs_max_level(
+    u: usize,
+    children: &Vec<Vec<usize>>,
+    level: &Vec<usize>,
+    max_level: &mut Vec<usize>,
+) -> usize {
+    max_level[u] = level[u];
+    children[u].iter().for_each(|&v| {
+        max_level[u] = max_level[u].max(dfs_max_level(v, children, level, max_level));
+    });
+    max_level[u]
+}
+
+// ================== Counter ====================
 
 /// Count the number of non-empty set for a rooted tree,
 /// where there is no pair (u,v) that u is the ancestor of v.
