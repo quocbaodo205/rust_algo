@@ -1,8 +1,10 @@
 mod dynamic;
 mod lazy;
+mod persistent;
 
 pub use dynamic::*;
 pub use lazy::*;
+pub use persistent::*;
 use std::{
     any::type_name,
     fmt::Debug,
@@ -224,6 +226,19 @@ impl<M: Monoid> FromIterator<M::M> for SegmentTree<M> {
         }
 
         Self { t }
+    }
+}
+
+// Some useful Monoid
+#[derive(Debug, Clone)]
+struct I32Sum;
+impl Monoid for I32Sum {
+    type M = i32;
+    fn id() -> i32 {
+        0
+    }
+    fn op(l: &i32, r: &i32) -> i32 {
+        l + r
     }
 }
 
