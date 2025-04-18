@@ -8,6 +8,9 @@ use std::io::{stdin, stdout, BufReader, BufWriter, Stdin, StdoutLock, Write};
 // use binomial::BinomialPrime;
 // use static_modint::ModInt998244353 as Mint;
 // pub mod dp;
+// pub mod segtree;
+// use segtree::LiChaoTree;
+// use segtree::RangeAffineRangeSum;
 pub mod utils;
 
 type VV<T> = Vec<Vec<T>>;

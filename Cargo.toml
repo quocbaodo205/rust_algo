@@ -10,4 +10,5 @@ edition = "2021"
 # formal_power_series = { path = "../cprs/crates/polynomial/formal_power_series" }
 # static_modint = { path = "../cprs/crates/number_theory/modint/static_modint" }
 # binomial = { path = "../cprs/crates/combinatorics/binomial" }
+# offline_dynamic_convex_hull_trick = { path = "../cprs/crates/data_structure/offline_dynamic_convex_hull_trick" }
 # proconio = "0.5.0"
