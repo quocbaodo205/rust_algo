@@ -24,9 +24,11 @@ impl From<(isize, isize)> for Affine {
 
 type LiChaoTreeNode = Node<Affine, Zst>;
 
+// The range if LiChaoTree is the range of query (range of x)
 // let mut lct = LiChaoTree::new(-1_000_000_010..1_000_000_010isize);
 // lct.add_line((b[0] as isize, 0));
 // let dpi = lct.evaluate(a[i] as isize);
+// Evaluate is find min
 #[derive(Debug, Clone)]
 pub struct LiChaoTree {
     range: Range<isize>,
