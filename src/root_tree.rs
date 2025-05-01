@@ -177,6 +177,67 @@ pub fn dfs_max_level(
     max_level[u]
 }
 
+// Dummy combine structure for hl_combine.
+// Should be copy and modify with the hl_combine to be useful.
+struct CombineStructure {}
+
+impl CombineStructure {
+    fn new() -> Self {
+        CombineStructure {}
+    }
+
+    fn add(&mut self) {}
+
+    // This should take ownership of the rhs and drop it.
+    fn combine(&mut self, rhs: CombineStructure) {}
+
+    fn get(&self) -> i32 {
+        0
+    }
+}
+
+// Heavy-light combination.
+// Use when need to combine result from all children c in childen[v].
+// Very often use for dynamic programming.
+fn hl_combine(
+    u: usize,
+    children: &Vec<Vec<usize>>,
+    tsize: &Vec<usize>,
+    combine_structure: &mut CombineStructure,
+    dp: &mut Vec<i32>,
+) {
+    // Leaf logic: usually only need to add something.
+    if children[u].is_empty() {
+        combine_structure.add();
+        return;
+    }
+
+    // Figure out heavy child
+    let mut hv = children[u][0];
+    for &v in children[u].iter() {
+        if tsize[v] > tsize[hv] {
+            hv = v;
+        }
+    }
+
+    // Always work for heavy first.
+    hl_combine(hv, children, tsize, combine_structure, dp);
+
+    for &v in children[u].iter() {
+        if v == hv {
+            continue;
+        } else {
+            // Work for light later to ensure result from light does not affect heavy.
+            let mut ns = CombineStructure::new();
+            hl_combine(v, children, tsize, &mut ns, dp);
+            combine_structure.combine(ns);
+        }
+    }
+
+    dp[u] = combine_structure.get();
+    combine_structure.add();
+}
+
 // ================== Counter ====================
 
 /// Count the number of non-empty set for a rooted tree,

@@ -1,8 +1,8 @@
 use std::{
     cmp::Ordering,
     collections::BTreeSet,
-    fmt::{Debug, Display},
-    io::{BufRead, BufReader, BufWriter, Stdin, Stdout, Write},
+    fmt::Debug,
+    io::{BufRead, BufReader, Stdin},
     ops::Bound::*,
     str::FromStr,
 };
@@ -472,34 +472,6 @@ pub fn read_edge_list(m: usize, line: &mut String, reader: &mut BufReader<Stdin>
         el.push((u - 1, v - 1));
     });
     el
-}
-
-pub fn array_output<T>(a: &V<T>, out: &mut BufWriter<Stdout>)
-where
-    T: Display,
-{
-    a.iter().for_each(|x| {
-        write!(out, "{x} ").unwrap();
-    });
-    writeln!(out).unwrap();
-}
-
-pub fn array_output_with_size<T>(a: &V<T>, out: &mut BufWriter<Stdout>)
-where
-    T: Display,
-{
-    write!(out, "{} ", a.len()).unwrap();
-    a.iter().for_each(|x| {
-        write!(out, "{x} ").unwrap();
-    });
-    writeln!(out).unwrap();
-}
-
-pub fn write_vertex_list_add1(a: &V<US>, out: &mut BufWriter<Stdout>) {
-    a.iter().for_each(|x| {
-        write!(out, "{} ", x + 1).unwrap();
-    });
-    writeln!(out).unwrap();
 }
 
 // =========================== Interactive queries =======================

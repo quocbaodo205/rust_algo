@@ -167,6 +167,30 @@ impl LiChaoTree {
     }
 }
 
+/// LiChaoTree with all lines stored.
+/// Useful when want to combine many of these trees together.
+pub struct LiChaoTreeWithAllLines {
+    lines: Vec<(isize, isize)>,
+    lct: LiChaoTree,
+}
+
+impl LiChaoTreeWithAllLines {
+    pub fn new(range: impl RangeBounds<isize>) -> Self {
+        LiChaoTreeWithAllLines {
+            lct: LiChaoTree::new(range),
+            lines: Vec::new(),
+        }
+    }
+
+    // Combine and destroy the other struct
+    pub fn combine(&mut self, rhs: LiChaoTreeWithAllLines) {
+        for x in rhs.lines.into_iter() {
+            self.lines.push(x);
+            self.lct.add_line(x);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
