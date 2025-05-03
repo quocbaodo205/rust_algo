@@ -8,8 +8,8 @@
 
 use std::cmp::min;
 
-// Template for cost function.
-pub fn cost_fn(j: usize, k: usize) -> usize {
+// Template for cost function for range [i..=j]
+pub fn cost_fn(i: usize, j: usize) -> usize {
     0
 }
 
@@ -28,17 +28,17 @@ pub fn dc_compute(
 
     let mid = (l + r) / 2;
     // Find which k is best
-    let mut best = (usize::MAX, -1);
+    let mut best = (usize::MAX, 0);
     for k in optl..=min(mid, optr) {
         let c = if k > 0 { dp_before[k - 1] } else { 0 } + cost_fn(k, mid);
         if c < best.0 {
             best.0 = c;
-            best.1 = k as i32;
+            best.1 = k;
         }
     }
     dp_cur[mid] = best.0;
     // D&C for other range
-    let opt = best.1 as usize;
+    let opt = best.1;
     if mid > l {
         dc_compute(dp_cur, dp_before, l, mid - 1, optl, opt);
     }
@@ -55,11 +55,12 @@ pub fn solve_dc() {
     for j in 0..n {
         dp_before[j] = cost_fn(0, j);
     }
-    for _ in 1..m {
+    // println!("dp[0] = {dp_before:?}");
+    for _i in 1..m {
         let mut dp_cur = vec![0; n];
         dc_compute(&mut dp_cur, &dp_before, 0, n - 1, 0, n - 1);
         dp_before = dp_cur;
+        // println!("dp[{_i}] = {dp_before:?}");
     }
-
-    // Have the whole dp_before to use afterward.
+    // println!("{}", dp_before[n - 1]);
 }
