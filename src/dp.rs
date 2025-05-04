@@ -64,3 +64,72 @@ pub fn solve_dc() {
     }
     // println!("{}", dp_before[n - 1]);
 }
+
+macro_rules! isOn {
+    ($S:expr, $b:expr) => {
+        ($S & (1 << $b)) > 0
+    };
+}
+
+macro_rules! turnOn {
+    ($S:ident, $b:expr) => {
+        $S |= (1 << $b)
+    };
+    ($S:expr, $b:expr) => {
+        $S | (1 << $b)
+    };
+}
+
+// https://codeforces.com/blog/entry/90841
+// Currently solve the fill domino 2x1 in grid n * m problem.
+fn plug_dp() {
+    let n = 10;
+    let m = 20;
+    let max_mask = 1usize << (m + 1);
+    // dp[j][state]: for each row and j is -> plug
+    let mut dp_before: Vec<Vec<usize>> = vec![vec![0; max_mask << 1]; m + 1];
+    dp_before[m][0] = 1; // Base case all 0 row as processed and off.
+    for _i in 0..n {
+        let mut dp_cur: Vec<Vec<usize>> = vec![vec![0; max_mask << 1]; m + 1];
+
+        // Transfer the -> plug from the end of previous to the start of current.
+        for mask in 0..max_mask {
+            dp_cur[0][mask << 1] = dp_before[m][mask];
+        }
+
+        for j in 0..m {
+            // j is -> plug, j + 1 is down plug
+            for mask in 0..max_mask {
+                let x = dp_cur[j][mask];
+                let is_right_on = isOn!(mask, j);
+                let is_down_on = isOn!(mask, j + 1);
+                if !is_right_on && !is_down_on {
+                    // Need to add a domino at i,j
+                    // Horizontal domino:
+                    // - at j now a down plug, and it's not down (same)
+                    // - at j+1 is now a -> plug, and it has some (flip to 1)
+                    dp_cur[j + 1][mask ^ (1 << (j + 1))] += x;
+                    // Vertical domino:
+                    // - at j is now a down plug, and it has some (flip to 1)
+                    // - at j+1 is now a -> plug, and it has no -> (same)
+                    dp_cur[j + 1][mask ^ (1 << j)] += x;
+                } else if is_right_on && !is_down_on {
+                    // Already have a domino -> over from j to j+1,
+                    // - at j now a down plug, and it's not down (flip)
+                    // - at j+1 is now a -> plug, and it has none (same)
+                    dp_cur[j + 1][mask ^ (1 << j)] += x;
+                } else if !is_right_on && is_down_on {
+                    // Already have a domino down from (i,j+1) to (i+1,j+1),
+                    // - at j now a down plug, and it's not down (same)
+                    // - at j+1 is now a -> plug, and it has none (flip)
+                    dp_cur[j + 1][mask ^ (1 << (j + 1))] += x;
+                }
+            }
+        }
+
+        dp_before = dp_cur;
+    }
+
+    // Last row -> at m, the entire grid is filled so the plug mask should be 0.
+    let ans = dp_before[m][0];
+}
