@@ -115,6 +115,15 @@ pub fn prime_factorize(a: usize, lp: &Vec<usize>, pr: &Vec<usize>) -> Vec<(usize
     ans
 }
 
+/// Quickly calculate Euler totient for a single number knowing its prime factorization.
+pub fn totient(pfactorize: &Vec<(usize, usize)>) -> u64 {
+    let mut res = 1u64;
+    for &(p, e) in pfactorize.iter() {
+        res *= (p as u64).pow(e as u32 - 1) * (p as u64 - 1);
+    }
+    res
+}
+
 pub fn mobius(n: usize) -> Vec<i8> {
     let mut is_composite: Vec<bool> = vec![false; n + 1];
     let mut pr: Vec<usize> = Vec::new();
@@ -222,7 +231,7 @@ pub fn divisors(n: usize) -> Vec<usize> {
     res
 }
 
-fn power(a: u64, b: u64, m: u64) -> u64 {
+pub fn power_mod(a: u64, b: u64, m: u64) -> u64 {
     let mut res = 1u64;
     let mut x = a;
     let mut cur = b;

@@ -178,6 +178,7 @@ pub fn decomposition_traveling() {
         // TODO: Main part: calculate answer as with decomp_node as a root tree.
         // Almost always single path calculation from decomp_node to every node.
         // Usually involve combining u and parent[u] with some storage and combination.
+        // For complicated problems, might invole seperation for up and down path along with height.
         for &u in all_bfss_flat.iter() {
             // Example:
             // bitmask[u] = bitmask[parent[u]] ^ a[u]; // bitmask[u]: all mask from decomp_node to u.
@@ -195,6 +196,9 @@ pub fn decomposition_traveling() {
 
             // Calculate dp[u] in reverse manner: from leave to top (almost decomp node).
             // DP[u] store the result of the subtree under u for this decomposition.
+            // For height, it's important to note that decomposition does not guarantee height to be <= log(n).
+            // It's best to base the calculation on the height of the node u, rather have a count and check
+            // for all possible height of v.
             for &u in bfs.iter().rev() {
                 // Example:
                 // let base = bitmask[u] ^ a[decomp_node]; // From u to before decomp_node
@@ -225,6 +229,123 @@ pub fn decomposition_traveling() {
 
         // Put to answer and reset all to prepare for the next decomposition.
         for &u in all_bfss_flat.iter() {
+            ans[u] += dp[u];
+            dp[u] = 0;
+            parent[u] = usize::MAX;
+        }
+    }
+}
+
+/// Decomposition style travling and calculating, but for label on edges.
+pub fn decomposition_traveling_edge() {
+    let n = 10;
+    let mut uelist: Vec<(US, US, US)> = Vec::new();
+
+    let g = UndirectedGraph::from_edges(n, &uelist);
+    let tree = shallowest_decomposition_tree(0, &g);
+    let bfs_list = bfs_list(&tree);
+
+    // Needed storage for traveling.
+    let mut parent = vec![usize::MAX; n];
+    let mut ans = vec![0; n];
+    let mut dp = vec![0u64; n];
+    // Turn into d_graph for fast delete after each decomposition.
+    let mut d_graph: Vec<Vec<(US, US)>> = vec![Vec::new(); n];
+    for u in 0..n {
+        for &(v, d) in g[u].iter() {
+            d_graph[u].push((v, d));
+        }
+    }
+    // Check each decomposition node in bfs manner:
+    for &decomp_node in bfs_list.iter() {
+        // Effectively delete the decomp_node (decompose at this node)
+        parent[decomp_node] = decomp_node;
+        for (v, _) in d_graph[decomp_node].clone().into_iter() {
+            // Find, swap last and remove.
+            if let Some(idx) = d_graph[v].iter().position(|&(x, _)| x == decomp_node) {
+                d_graph[v].swap_remove(idx);
+            }
+        }
+
+        // println!("decomp = {decomp_node}");
+        // Get BFS order traversal for every subtree after decomposition
+        let mut all_bfss: VV<(US, US)> = Vec::new();
+        // With decomp node, flaten out but still in order of every child
+        let mut all_bfss_flat: Vec<(US, US)> = vec![(decomp_node, 0)];
+        for &(child, d) in d_graph[decomp_node].iter() {
+            parent[child] = decomp_node;
+            let mut bfs_at_child = Vec::<(US, US)>::new();
+            let mut cur: VecDeque<(US, US)> = VecDeque::new();
+            cur.push_back((child, d));
+            while let Some(uw) = cur.pop_front() {
+                bfs_at_child.push(uw);
+                for &(v, d) in d_graph[uw.0].iter() {
+                    if parent[v] == usize::MAX {
+                        parent[v] = uw.0;
+                        cur.push_back((v, d));
+                    }
+                }
+            }
+            // Clone out and put to flat list
+            // println!("Subtree: {bfs_at_child:?}");
+            all_bfss_flat.extend(bfs_at_child.clone().into_iter());
+            all_bfss.push(bfs_at_child);
+        }
+
+        // TODO: Main part: calculate answer as with decomp_node as a root tree.
+        // Almost always single path calculation from decomp_node to every node.
+        // Usually involve combining u and parent[u] with some storage and combination.
+        // For complicated problems, might invole seperation for up and down path along with height.
+        for &(u, d) in all_bfss_flat.iter() {
+            // Example:
+            // bitmask[u] = bitmask[parent[u]] ^ a[u]; // bitmask[u]: all mask from decomp_node to u.
+            // bitmask_count[bitmask[u]] += 1;
+        }
+
+        // TODO: Combined path: Work for each subtree and combine it with all calculated single path.
+        for bfs in all_bfss.iter() {
+            // Minus out everything for this subtree.
+            // So whatever count we currently have is for all other node without this subtree.
+            // Example:
+            // for &u in bfs.iter() {
+            //     bitmask_count[bitmask[u]] -= 1;
+            // }
+
+            // Calculate dp[u] in reverse manner: from leave to top (almost decomp node).
+            // DP[u] store the result of the subtree under u for this decomposition.
+            // For height, it's important to note that decomposition does not guarantee height to be <= log(n).
+            // It's best to base the calculation on the height of the node u, rather have a count and check
+            // for all possible height of v.
+            for &(u, _) in bfs.iter().rev() {
+                // Example:
+                // let base = bitmask[u] ^ a[decomp_node]; // From u to before decomp_node
+                // for &p in palindrome.iter() {
+                //     // Find all combination that gives a palindrome
+                //     // from this branch to all other branches (combination path count)
+                //     dp[u] += bitmask_count[base ^ p];
+                // }
+
+                // Propagate up to parent, important since we're working backward from leaves.
+                dp[parent[u]] += dp[u];
+            }
+
+            // Plus back to get ready for other subtree.
+            // Example:
+            // for &u in bfs.iter() {
+            //     bitmask_count[bitmask[u]] += 1;
+            // }
+        }
+
+        // Special calculation for the decomp_node: The single path count.
+        // Example:
+        // bitmask_count[a[decomp_node]] -= 1; // Minus out to avoid only one node case: already accounted for.
+        // for &p in palindrome.iter() {
+        //     dp[decomp_node] += bitmask_count[p];
+        // }
+        // dp[decomp_node] /= 2; // Avoiding double count for decomp_node since 2 branches are used twice.
+
+        // Put to answer and reset all to prepare for the next decomposition.
+        for &(u, _) in all_bfss_flat.iter() {
             ans[u] += dp[u];
             dp[u] = 0;
             parent[u] = usize::MAX;
