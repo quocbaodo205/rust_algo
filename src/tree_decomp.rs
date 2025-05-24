@@ -12,8 +12,8 @@ type UU = (US, US);
 /// Follow from root via children, guarantee the chain from root to any leaf is the shallowest.
 /// Tree height is bounded by O(log n).
 pub struct Arborescence {
-    root: usize,
-    chilren: VV<US>,
+    pub root: usize,
+    pub next_root_decomp: VV<US>,
 }
 
 fn extract_chain(labels: usize, u: usize, decomp_tree: &mut VV<US>, stacks: &mut VV<US>) {
@@ -99,7 +99,7 @@ where
     );
     Arborescence {
         root: decomposition_root,
-        chilren: decomp_tree,
+        next_root_decomp: decomp_tree,
     }
 }
 
@@ -110,7 +110,7 @@ pub fn bfs_list(tree: &Arborescence) -> Vec<usize> {
     cur.push_back(tree.root);
     while let Some(u) = cur.pop_front() {
         bfs.push(u);
-        for &v in tree.chilren[u].iter() {
+        for &v in tree.next_root_decomp[u].iter() {
             cur.push_back(v);
         }
     }
@@ -307,7 +307,7 @@ pub fn decomposition_traveling_edge() {
             // Minus out everything for this subtree.
             // So whatever count we currently have is for all other node without this subtree.
             // Example:
-            // for &u in bfs.iter() {
+            // for &(u,_) in bfs.iter() {
             //     bitmask_count[bitmask[u]] -= 1;
             // }
 
@@ -331,7 +331,7 @@ pub fn decomposition_traveling_edge() {
 
             // Plus back to get ready for other subtree.
             // Example:
-            // for &u in bfs.iter() {
+            // for &(u,_) in bfs.iter() {
             //     bitmask_count[bitmask[u]] += 1;
             // }
         }
@@ -351,4 +351,258 @@ pub fn decomposition_traveling_edge() {
             parent[u] = usize::MAX;
         }
     }
+}
+
+// ==================================== DFS single update single get ===========================
+
+pub fn dfs_decomp(
+    u: usize,
+    p: usize,
+    tree: &Arborescence,
+    time_in: &mut Vec<usize>,
+    time_out: &mut Vec<usize>,
+    global_time: &mut usize,
+    up: &mut VV<US>,
+    lg: usize,
+) {
+    time_in[u] = *global_time;
+    time_out[u] = *global_time;
+    *global_time += 1;
+    // Updating 2^i parent
+    up[u][0] = p;
+    for i in 1..=lg {
+        up[u][i] = up[up[u][i - 1]][i - 1];
+    }
+
+    for &v in tree.next_root_decomp[u].iter() {
+        dfs_decomp(v, u, tree, time_in, time_out, global_time, up, lg);
+        time_out[u] = time_out[v];
+    }
+}
+
+/// Check if u is parent of v
+pub fn is_parent_decomp(u: usize, v: usize, time_in: &Vec<usize>, time_out: &Vec<usize>) -> bool {
+    return time_in[u] <= time_in[v] && time_out[u] >= time_out[v];
+}
+
+pub fn get_lca_decomp(
+    u: US,
+    v: US,
+    time_in: &Vec<usize>,
+    time_out: &Vec<usize>,
+    up: &VV<US>,
+) -> usize {
+    if is_parent_decomp(u, v, time_in, time_out) {
+        return u;
+    }
+    if is_parent_decomp(v, u, time_in, time_out) {
+        return v;
+    }
+    let mut u = u;
+    for i in (0..up[0].len()).rev() {
+        if !is_parent_decomp(up[u][i], v, time_in, time_out) {
+            u = up[u][i];
+        }
+    }
+    up[u][0]
+}
+
+// Fast cp to main
+
+// /// Update a node relative to all decomposition.
+// /// Assume we have a function f(u,root) that give the result.
+// /// then we want to store it into dp[root]. This will be later use for calculation
+// pub fn update_decomp(
+//     u: usize,
+//     root: usize,
+//     tree: &tree_decomp::Arborescence,
+//     time_in_decomp: &Vec<usize>,
+//     time_out_decomp: &Vec<usize>,
+//     up_decomp: &VV<US>,
+//     dp: &mut Vec<US>,
+// ) {
+//     // println!("Updating {u}, with root_decomp = {root}");
+//     if u == root {
+//         dp[root] = 0; // TODO: logic here
+//         return;
+//     }
+//     let d = 1; // TODO: f(u,root)
+//     dp[root] = dp[root].min(d); // Length from d to root.
+
+//     for &next_root in tree.next_root_decomp[root].iter() {
+//         // Only update the correct subtree in decomposition.
+//         if tree_decomp::is_parent_decomp(next_root, u, time_in_decomp, time_out_decomp) {
+//             update_decomp(
+//                 u,
+//                 next_root,
+//                 tree,
+//                 time_in_decomp,
+//                 time_out_decomp,
+//                 up_decomp,
+//                 dp,
+//             );
+//         }
+//     }
+// }
+
+// /// Get the value of a node via all it decomposition.
+// /// root will keep getting closer to u.
+// pub fn get_decomp(
+//     u: usize,
+//     root: usize,
+//     tree: &tree_decomp::Arborescence,
+//     time_in_decomp: &Vec<usize>,
+//     time_out_decomp: &Vec<usize>,
+//     up_decomp: &VV<US>,
+//     dp: &mut Vec<US>,
+// ) -> US {
+//     // println!("Query for {u}, with root_decomp = {root}");
+//     if u == root {
+//         return dp[root];
+//     }
+//     let mut ans = usize::MAX;
+//     // Use the root as a possible ans, even if it can be wrong.
+//     // If this root is not set, then next root related can't be an ans as well.
+//     if dp[root] < usize::MAX {
+//         let d = 1; // TODO: f(u,root)
+//         ans = ans.min(d + dp[root]);
+//         for &next_root in tree.next_root_decomp[root].iter() {
+//             if tree_decomp::is_parent_decomp(next_root, u, time_in_decomp, time_out_decomp) {
+//                 // println!("{u} in same subtree with {next_root}, go deeper...");
+//                 ans = ans.min(get_decomp(
+//                     u,
+//                     next_root,
+//                     tree,
+//                     time_in_decomp,
+//                     time_out_decomp,
+//                     up_decomp,
+//                     dp,
+//                 ));
+//             }
+//         }
+//     }
+//     ans
+// }
+
+/// Update a node relative to all decomposition.
+/// Assume we have a function f(u,root) that give the result.
+/// then we want to store it into dp[root]. This will be later use for calculation
+pub fn update_decomp(
+    u: usize,
+    root: usize,
+    tree: &Arborescence,
+    time_in_decomp: &Vec<usize>,
+    time_out_decomp: &Vec<usize>,
+    up_decomp: &VV<US>,
+    dp: &mut Vec<US>,
+) {
+    // println!("Updating {u}, with root_decomp = {root}");
+    if u == root {
+        dp[root] = 0;
+        return;
+    }
+    let d = 1; // TODO: f(u,root).
+    dp[root] = dp[root].min(d); // Length from d to root.
+
+    for &next_root in tree.next_root_decomp[root].iter() {
+        // Only update the correct subtree in decomposition.
+        if is_parent_decomp(next_root, u, time_in_decomp, time_out_decomp) {
+            update_decomp(
+                u,
+                next_root,
+                tree,
+                time_in_decomp,
+                time_out_decomp,
+                up_decomp,
+                dp,
+            );
+        }
+    }
+}
+
+/// Get the value of a node via all it decomposition.
+/// root will keep getting closer to u.
+pub fn get_decomp(
+    u: usize,
+    root: usize,
+    tree: &Arborescence,
+    time_in_decomp: &Vec<usize>,
+    time_out_decomp: &Vec<usize>,
+    up_decomp: &VV<US>,
+    dp: &mut Vec<US>,
+) -> US {
+    // println!("Query for {u}, with root_decomp = {root}");
+    if u == root {
+        return dp[root];
+    }
+    let mut ans = usize::MAX;
+    // Use the root as a possible ans, even if it can be wrong.
+    // If this root is not set, then next root related can't be an ans as well.
+    if dp[root] < usize::MAX {
+        let d = 1; // TODO: f(u, root)
+        ans = ans.min(d + dp[root]);
+        for &next_root in tree.next_root_decomp[root].iter() {
+            if is_parent_decomp(next_root, u, time_in_decomp, time_out_decomp) {
+                // println!("{u} in same subtree with {next_root}, go deeper...");
+                ans = ans.min(get_decomp(
+                    u,
+                    next_root,
+                    tree,
+                    time_in_decomp,
+                    time_out_decomp,
+                    up_decomp,
+                    dp,
+                ));
+            }
+        }
+    }
+    ans
+}
+
+/// Single edit and modify using decomposition.
+pub fn single_edit() {
+    let n = 10;
+
+    let uelist: Vec<(US, US)> = vec![(0, 1), (1, 2)];
+    let g = UndirectedGraph::from_unweighted_edges(n, &uelist);
+    let tree = shallowest_decomposition_tree(0, &g);
+    // First: Need to know which subtree contains the node to quickly go there
+    // Make use of the LCA pattern: if lca(u, node) == node, then it's in that subtree.
+    let mut time_in_decomp = vec![0; n];
+    let mut time_out_decomp = vec![0; n];
+    let mut global_time_decomp = 0;
+    let lg = (n as f32).log2() as usize;
+    let mut up_decomp: VV<US> = vec![vec![0; lg + 1]; n];
+    dfs_decomp(
+        tree.root,
+        tree.root,
+        &tree,
+        &mut time_in_decomp,
+        &mut time_out_decomp,
+        &mut global_time_decomp,
+        &mut up_decomp,
+        lg,
+    );
+
+    // Storage for the ans at every decomp_root;
+    let mut dp = vec![0; n];
+    // Update and get as follow, copy and modify:
+    update_decomp(
+        10,
+        tree.root,
+        &tree,
+        &time_in_decomp,
+        &time_out_decomp,
+        &up_decomp,
+        &mut dp,
+    );
+    get_decomp(
+        10,
+        tree.root,
+        &tree,
+        &time_in_decomp,
+        &time_out_decomp,
+        &up_decomp,
+        &mut dp,
+    );
 }
