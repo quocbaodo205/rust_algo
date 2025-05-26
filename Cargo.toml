@@ -11,4 +11,7 @@ edition = "2021"
 # static_modint = { path = "../cprs/crates/number_theory/modint/static_modint" }
 # binomial = { path = "../cprs/crates/combinatorics/binomial" }
 # offline_dynamic_convex_hull_trick = { path = "../cprs/crates/data_structure/offline_dynamic_convex_hull_trick" }
+# lazy_segment_tree = { path = "../cprs/crates/data_structure/segment_tree/lazy_segment_tree" }
+# algebraic_structure = { path = "../cprs/crates/algebra/algebraic_structure" }
+# algebraic_traits = { path = "../cprs/crates/algebra/algebraic_traits" }
 # proconio = "0.5.0"
