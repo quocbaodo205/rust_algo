@@ -14,4 +14,5 @@ edition = "2021"
 # lazy_segment_tree = { path = "../cprs/crates/data_structure/segment_tree/lazy_segment_tree" }
 # algebraic_structure = { path = "../cprs/crates/algebra/algebraic_structure" }
 # algebraic_traits = { path = "../cprs/crates/algebra/algebraic_traits" }
-# proconio = "0.5.0"
+# suffix_array = { path = "../cprs/crates/string/suffix_array" }
+# range_minimum_query = { path = "../cprs/crates/data_structure/range_minimum_query" }

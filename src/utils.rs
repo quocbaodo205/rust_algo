@@ -161,6 +161,7 @@ pub fn bin_search_template(l: usize, r: usize, f: &dyn Fn(usize) -> bool) -> usi
     return ans;
 }
 
+/// Template for tenary search. f usually required a cache if it's hard to calculate.
 pub fn ter_search_template(l: usize, r: usize, f: &dyn Fn(usize) -> i32) -> usize {
     let mut l = l;
     let mut r = r;
@@ -240,6 +241,44 @@ pub fn sliding_windows_d(s: &[u8], d: usize, f: &dyn Fn(usize) -> usize) {
         end += 1;
         contrib += f(end);
     }
+}
+
+/// Get first right / left pos that < a[i] using stack.
+pub fn first_smaller_pos(a: &[usize]) -> (Vec<usize>, Vec<usize>) {
+    // Given an array, find the first position to the right that is smaller than it.
+    let n = a.len();
+    let mut right_pos_smaller = vec![n; n];
+    let mut st = Vec::<(usize, usize)>::new();
+    for (i, &lcp_val) in a.iter().enumerate() {
+        while let Some(&(last_pos, last_val)) = st.last() {
+            if last_val > lcp_val {
+                right_pos_smaller[last_pos] = i;
+                st.pop();
+            } else {
+                break;
+            }
+        }
+        st.push((i, lcp_val));
+    }
+    // Given an array, find the first position to the left that is smaller than it.
+    // Work with the reverse array to keep the logic the same.
+    // We're padding 1 to the answer, so to get the true ans, -1 out.
+    let mut left_pos_smaller = vec![n; n];
+    let mut st = Vec::<(usize, usize)>::new();
+    for (i, &lcp_val) in a.iter().rev().enumerate() {
+        while let Some(&(last_pos, last_val)) = st.last() {
+            if last_val > lcp_val {
+                left_pos_smaller[last_pos] = i;
+                st.pop();
+            } else {
+                break;
+            }
+        }
+        st.push((i, lcp_val));
+    }
+    left_pos_smaller.reverse();
+    left_pos_smaller.iter_mut().for_each(|x| *x = n - *x);
+    (left_pos_smaller, right_pos_smaller)
 }
 
 pub fn next_permutation<T>(arr: &mut [T]) -> bool
