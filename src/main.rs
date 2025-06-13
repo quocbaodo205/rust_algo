@@ -23,6 +23,7 @@ pub mod utils;
 // pub mod string_utils;
 // use range_minimum_query::RangeMinimumQuery;
 // use suffix_array::SuffixArray;
+// pub mod mod_structure;
 
 type VV<T> = Vec<Vec<T>>;
 type US = usize;
